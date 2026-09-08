@@ -194,6 +194,7 @@ class ZoteroConfig:
 # Environment mapping
 # ---------------------------------------------------------------------------
 
+
 def _env_bool(name: str) -> bool | None:
     raw = os.environ.get(name)
     if raw is None or raw == "":

@@ -25,8 +25,10 @@ from zotero_mcp.identifiers import (
         # A DOI lifted out of a reference list keeps its full stop.
         ("See 10.1000/xyz.123.", "10.1000/xyz.123"),
         ("(10.1000/abc)", "10.1000/abc"),
-        ("10.1002/(SICI)1097-0142(19960101)77:1<1::AID>3.0.CO;2-9",
-         "10.1002/(sici)1097-0142(19960101)77:1<1::aid>3.0.co;2-9"),
+        (
+            "10.1002/(SICI)1097-0142(19960101)77:1<1::AID>3.0.CO;2-9",
+            "10.1002/(sici)1097-0142(19960101)77:1<1::aid>3.0.co;2-9",
+        ),
     ],
 )
 def test_normalize_doi_accepts(raw, expected):
@@ -83,8 +85,8 @@ def test_pmcid():
 
 def test_zotero_key_shape():
     assert is_zotero_key("ABCD2345")
-    assert not is_zotero_key("ABCD234")       # too short
-    assert not is_zotero_key("ABCDI345")      # 'I' is not in Zotero's alphabet
+    assert not is_zotero_key("ABCD234")  # too short
+    assert not is_zotero_key("ABCDI345")  # 'I' is not in Zotero's alphabet
     assert not is_zotero_key("abcd2345x")
 
 

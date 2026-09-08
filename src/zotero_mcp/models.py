@@ -31,6 +31,7 @@ class _Model(BaseModel):
 # Building blocks
 # ---------------------------------------------------------------------------
 
+
 class Creator(_Model):
     """One author, editor, translator or similar."""
 

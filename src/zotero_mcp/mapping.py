@@ -124,8 +124,17 @@ def publication_of(data: dict[str, Any], item_type: str) -> str | None:
     Resolved through the schema's base fields rather than a hand-written list,
     so conference papers, theses, statutes and datasets all answer correctly.
     """
-    for field in ("publicationTitle", "proceedingsTitle", "bookTitle", "repository",
-                  "publisher", "university", "institution", "websiteTitle", "blogTitle"):
+    for field in (
+        "publicationTitle",
+        "proceedingsTitle",
+        "bookTitle",
+        "repository",
+        "publisher",
+        "university",
+        "institution",
+        "websiteTitle",
+        "blogTitle",
+    ):
         actual = schema.resolve_field(item_type, field) or field
         if value := data.get(actual):
             return str(value)
@@ -263,8 +272,17 @@ def to_item_detail(
 
     # Fields Zotero manages itself are not item content and only add noise to
     # the rendered "Fields" section.
-    reserved = {"key", "version", "itemType", "creators", "tags", "collections",
-                "relations", "dateAdded", "dateModified"}
+    reserved = {
+        "key",
+        "version",
+        "itemType",
+        "creators",
+        "tags",
+        "collections",
+        "relations",
+        "dateAdded",
+        "dateModified",
+    }
     fields = {k: v for k, v in data.items() if k not in reserved and v not in (None, "", [], {})}
 
     return ItemDetail(

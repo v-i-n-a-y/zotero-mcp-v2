@@ -60,8 +60,9 @@ def test_creator_summary_falls_back_when_there_are_no_authors():
 
 
 def test_creator_summary_uses_institutional_names():
-    assert creator_summary([Creator(name="World Health Organization")]) == \
-        "World Health Organization"
+    assert (
+        creator_summary([Creator(name="World Health Organization")]) == "World Health Organization"
+    )
 
 
 SUMMARY = ItemSummary(
@@ -112,8 +113,9 @@ def test_empty_result_page_surfaces_the_suggestion_and_attempts():
 
 
 def test_result_page_notes_a_timeout_rather_than_pretending_completeness():
-    page = ResultPage(items=[SUMMARY], returned=1,
-                      diagnostics=SearchDiagnostics(strategy="exact", timed_out=True))
+    page = ResultPage(
+        items=[SUMMARY], returned=1, diagnostics=SearchDiagnostics(strategy="exact", timed_out=True)
+    )
     assert "time budget" in render_result_page(page, heading="Search")
 
 
@@ -132,7 +134,9 @@ def test_item_detail_renders_unusual_types_without_losing_fields():
 
 def test_item_detail_groups_creators_by_role():
     detail = ItemDetail(
-        key="K", title="T", item_type="book",
+        key="K",
+        title="T",
+        item_type="book",
         creators=[
             Creator(creator_type="author", last_name="A", first_name="Ann"),
             Creator(creator_type="editor", last_name="E", first_name="Ed"),
@@ -146,7 +150,9 @@ def test_item_detail_groups_creators_by_role():
 def test_item_detail_flags_an_unreachable_attachment():
     """A linked file whose path no longer resolves is an otherwise baffling failure."""
     detail = ItemDetail(
-        key="K", title="T", item_type="book",
+        key="K",
+        title="T",
+        item_type="book",
         attachments=[AttachmentRef(key="ATT1", title="paper.pdf", available=False)],
     )
     assert "file not available" in render_item_detail(detail)
@@ -154,9 +160,15 @@ def test_item_detail_flags_an_unreachable_attachment():
 
 def test_content_chunk_states_its_range_and_how_to_continue():
     chunk = ContentChunk(
-        item_key="ABCD2345", title="Paper", text="body",
-        first_page=1, last_page=5, total_pages=20,
-        has_more=True, next_pages="6-10", chars=4,
+        item_key="ABCD2345",
+        title="Paper",
+        text="body",
+        first_page=1,
+        last_page=5,
+        total_pages=20,
+        has_more=True,
+        next_pages="6-10",
+        chars=4,
     )
     out = render_content_chunk(chunk)
     assert "pages 1–5 of 20" in out
@@ -165,12 +177,15 @@ def test_content_chunk_states_its_range_and_how_to_continue():
 
 def test_annotations_group_by_page_and_keep_their_keys():
     annotations = [
-        Annotation(key="A1", parent_key="P", annotation_type="highlight",
-                   text="first", page_label="3"),
-        Annotation(key="A2", parent_key="P", annotation_type="note",
-                   comment="second", page_label="3"),
-        Annotation(key="A3", parent_key="P", annotation_type="highlight",
-                   text="third", page_label="9"),
+        Annotation(
+            key="A1", parent_key="P", annotation_type="highlight", text="first", page_label="3"
+        ),
+        Annotation(
+            key="A2", parent_key="P", annotation_type="note", comment="second", page_label="3"
+        ),
+        Annotation(
+            key="A3", parent_key="P", annotation_type="highlight", text="third", page_label="9"
+        ),
     ]
     out = render_annotations(annotations, heading="Annotations")
     assert out.count("### Page") == 2

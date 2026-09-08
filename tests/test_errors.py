@@ -89,9 +89,7 @@ def test_decorator_preserves_metadata():
 
 
 def test_every_error_subclass_has_a_distinct_code():
-    subclasses = [
-        cls for cls in ZoteroMcpError.__subclasses__()
-    ]
+    subclasses = [cls for cls in ZoteroMcpError.__subclasses__()]
     codes = [cls.code for cls in subclasses]
     assert len(codes) == len(set(codes)), f"duplicate codes among {codes}"
     assert Unsupported.code == "unsupported"

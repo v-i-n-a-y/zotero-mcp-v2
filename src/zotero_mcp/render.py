@@ -41,7 +41,9 @@ _CREATOR_ELISION_THRESHOLD = 3
 
 def creator_summary(creators: list[Creator]) -> str:
     """Human-readable author string: 'Smith', 'Smith & Jones', 'Smith et al.'."""
-    authors = [c for c in creators if c.creator_type in {"author", "presenter", "artist", "director"}]
+    authors = [
+        c for c in creators if c.creator_type in {"author", "presenter", "artist", "director"}
+    ]
     people = authors or creators
     if not people:
         return ""
@@ -119,7 +121,7 @@ def render_result_page(page: ResultPage, *, heading: str, numbered: bool = True)
         lines.append("")
 
     if page.next_cursor:
-        lines.append(f"*More results available — pass `cursor=\"{page.next_cursor}\"` to continue.*")
+        lines.append(f'*More results available — pass `cursor="{page.next_cursor}"` to continue.*')
     if page.diagnostics:
         diag = page.diagnostics
         if diag.timed_out:
@@ -153,8 +155,11 @@ def render_item_detail(detail: ItemDetail) -> str:
             by_role.setdefault(creator.creator_type, []).append(creator.display)
         for role, names in by_role.items():
             label = role[0].upper() + role[1:]
-            lines.append(f"**{label}s:** {', '.join(names)}" if len(names) > 1
-                         else f"**{label}:** {names[0]}")
+            lines.append(
+                f"**{label}s:** {', '.join(names)}"
+                if len(names) > 1
+                else f"**{label}:** {names[0]}"
+            )
 
     identifiers = []
     if detail.doi:
@@ -176,9 +181,23 @@ def render_item_detail(detail: ItemDetail) -> str:
         lines += ["", "## Abstract", "", detail.abstract]
 
     # Remaining fields, minus the ones already rendered above.
-    rendered = {"title", "abstractNote", "DOI", "url", "date", "creators", "tags",
-                "collections", "relations", "key", "version", "itemType", "extra",
-                "dateAdded", "dateModified"}
+    rendered = {
+        "title",
+        "abstractNote",
+        "DOI",
+        "url",
+        "date",
+        "creators",
+        "tags",
+        "collections",
+        "relations",
+        "key",
+        "version",
+        "itemType",
+        "extra",
+        "dateAdded",
+        "dateModified",
+    }
     extra_fields = {k: v for k, v in detail.fields.items() if k not in rendered and v}
     if extra_fields:
         lines += ["", "## Fields", ""]
@@ -200,8 +219,9 @@ def render_item_detail(detail: ItemDetail) -> str:
     if detail.note_count:
         counts.append(f"{detail.note_count} note{'s' if detail.note_count != 1 else ''}")
     if detail.annotation_count:
-        counts.append(f"{detail.annotation_count} annotation"
-                      f"{'s' if detail.annotation_count != 1 else ''}")
+        counts.append(
+            f"{detail.annotation_count} annotation{'s' if detail.annotation_count != 1 else ''}"
+        )
     if counts:
         lines += ["", f"*Also has: {', '.join(counts)}.*"]
 
@@ -235,7 +255,7 @@ def render_content_chunk(chunk: ContentChunk) -> str:
     lines.append(chunk.text)
 
     if chunk.has_more and chunk.next_pages:
-        lines += ["", f"*More to read — call again with `pages=\"{chunk.next_pages}\"`.*"]
+        lines += ["", f'*More to read — call again with `pages="{chunk.next_pages}"`.*']
     elif chunk.truncated:
         lines += ["", "*Output was truncated to fit the response budget.*"]
     return "\n".join(lines)
@@ -246,8 +266,12 @@ def render_annotations(annotations: list[Annotation], *, heading: str) -> str:
     if not annotations:
         return f"# {heading}\n\nNo annotations found."
 
-    lines = [f"# {heading}", "", f"*{len(annotations)} annotation"
-             f"{'s' if len(annotations) != 1 else ''}*", ""]
+    lines = [
+        f"# {heading}",
+        "",
+        f"*{len(annotations)} annotation{'s' if len(annotations) != 1 else ''}*",
+        "",
+    ]
     current_page: str | None = object()  # sentinel distinct from any real label
     for note in annotations:
         page = note.page_label or (str(note.page_index) if note.page_index is not None else None)
@@ -288,8 +312,12 @@ def render_collections(page: CollectionPage, *, heading: str) -> str:
     """A collection listing, indented by depth when paths are available."""
     if not page.collections:
         return f"# {heading}\n\nNo collections found."
-    lines = [f"# {heading}", "", f"*{len(page.collections)} collection"
-             f"{'s' if len(page.collections) != 1 else ''}*", ""]
+    lines = [
+        f"# {heading}",
+        "",
+        f"*{len(page.collections)} collection{'s' if len(page.collections) != 1 else ''}*",
+        "",
+    ]
     for collection in page.collections:
         depth = collection.path.count("/") if collection.path else 0
         counts = []
@@ -300,7 +328,7 @@ def render_collections(page: CollectionPage, *, heading: str) -> str:
         suffix = f" — {', '.join(counts)}" if counts else ""
         lines.append(f"{'  ' * depth}- **{collection.name}** (`{collection.key}`){suffix}")
     if page.next_cursor:
-        lines += ["", f"*More — pass `cursor=\"{page.next_cursor}\"` to continue.*"]
+        lines += ["", f'*More — pass `cursor="{page.next_cursor}"` to continue.*']
     return "\n".join(lines)
 
 
@@ -333,8 +361,12 @@ def render_write_result(result: WriteResult) -> str:
     """
     verb = result.action.replace("_", " ")
     if result.dry_run:
-        lines = [f"# Preview: {verb}", "",
-                 "**Nothing was changed.** Re-run with `dry_run=False` to apply.", ""]
+        lines = [
+            f"# Preview: {verb}",
+            "",
+            "**Nothing was changed.** Re-run with `dry_run=False` to apply.",
+            "",
+        ]
     else:
         lines = [f"# {verb[0].upper()}{verb[1:]}", ""]
 
@@ -369,8 +401,7 @@ def render_write_result(result: WriteResult) -> str:
 def render_duplicates(groups: list[DuplicateGroup], *, heading: str) -> str:
     if not groups:
         return f"# {heading}\n\nNo duplicates found."
-    lines = [f"# {heading}", "", f"*{len(groups)} group"
-             f"{'s' if len(groups) != 1 else ''}*", ""]
+    lines = [f"# {heading}", "", f"*{len(groups)} group{'s' if len(groups) != 1 else ''}*", ""]
     for index, group in enumerate(groups, start=1):
         lines.append(f"### Group {index} — {group.reason} ({group.confidence:.0%} confidence)")
         for item in group.items:
@@ -408,18 +439,21 @@ def render_stats(stats: LibraryStats) -> str:
 
 def render_health(report: HealthReport) -> str:
     status = "reachable" if report.reachable else "**not reachable**"
-    lines = ["# Server status", "",
-             f"- **Backend:** {report.backend} ({status})"]
+    lines = ["# Server status", "", f"- **Backend:** {report.backend} ({status})"]
     if report.library:
         name = report.library.name or report.library.library_id
         lines.append(f"- **Library:** {name} ({report.library.library_type})")
     lines.append(f"- **Zotero schema:** v{report.schema_version}")
-    lines.append(f"- **Semantic index:** {report.semantic_index}"
-                 + (f" ({report.indexed_items:,} items)" if report.indexed_items else ""))
+    lines.append(
+        f"- **Semantic index:** {report.semantic_index}"
+        + (f" ({report.indexed_items:,} items)" if report.indexed_items else "")
+    )
     if report.optional_features:
         lines += ["", "## Optional features", ""]
-        lines += [f"- {name}: {'available' if ok else 'not installed'}"
-                  for name, ok in sorted(report.optional_features.items())]
+        lines += [
+            f"- {name}: {'available' if ok else 'not installed'}"
+            for name, ok in sorted(report.optional_features.items())
+        ]
     if report.warnings:
         lines += ["", "## Warnings", ""]
         lines += [f"- {w}" for w in report.warnings]

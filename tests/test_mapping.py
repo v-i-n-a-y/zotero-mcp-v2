@@ -148,8 +148,10 @@ def test_item_summary_derives_a_byline_without_meta():
 
 def test_item_summary_uses_the_type_specific_title_field():
     """A case has no 'title'; it has 'caseName'."""
-    case = {"key": "CASE1234", "data": {"itemType": "case", "caseName": "Roe v. Wade",
-                                        "dateDecided": "January 22, 1973"}}
+    case = {
+        "key": "CASE1234",
+        "data": {"itemType": "case", "caseName": "Roe v. Wade", "dateDecided": "January 22, 1973"},
+    }
     summary = to_item_summary(case)
     assert summary.title == "Roe v. Wade"
 
@@ -169,8 +171,15 @@ def test_group_library_produces_a_group_uri():
 
 def test_item_detail_folds_in_children():
     children = [
-        {"key": "ATT1", "data": {"itemType": "attachment", "title": "PDF",
-                                 "contentType": "application/pdf", "filename": "p.pdf"}},
+        {
+            "key": "ATT1",
+            "data": {
+                "itemType": "attachment",
+                "title": "PDF",
+                "contentType": "application/pdf",
+                "filename": "p.pdf",
+            },
+        },
         {"key": "NOTE1", "data": {"itemType": "note", "note": "<p>hi</p>"}},
         {"key": "ANN1", "data": {"itemType": "annotation", "annotationType": "highlight"}},
     ]
@@ -189,29 +198,49 @@ def test_item_detail_excludes_zotero_managed_keys_from_fields():
 
 def test_annotation_page_index_is_converted_to_one_based():
     """Zotero stores pageIndex 0-based; every human-facing page number is not."""
-    raw = {"key": "ANN1", "data": {"itemType": "annotation", "parentItem": "ATT1",
-                                   "annotationType": "highlight",
-                                   "annotationText": "quoted",
-                                   "annotationPosition": {"pageIndex": 0}}}
+    raw = {
+        "key": "ANN1",
+        "data": {
+            "itemType": "annotation",
+            "parentItem": "ATT1",
+            "annotationType": "highlight",
+            "annotationText": "quoted",
+            "annotationPosition": {"pageIndex": 0},
+        },
+    }
     assert to_annotation(raw).page_index == 1
 
 
 def test_annotation_position_as_a_json_string():
-    raw = {"key": "ANN1", "data": {"itemType": "annotation", "parentItem": "ATT1",
-                                   "annotationType": "note",
-                                   "annotationPosition": '{"pageIndex": 4}'}}
+    raw = {
+        "key": "ANN1",
+        "data": {
+            "itemType": "annotation",
+            "parentItem": "ATT1",
+            "annotationType": "note",
+            "annotationPosition": '{"pageIndex": 4}',
+        },
+    }
     assert to_annotation(raw).page_index == 5
 
 
 def test_annotation_with_unparseable_position():
-    raw = {"key": "ANN1", "data": {"itemType": "annotation", "parentItem": "ATT1",
-                                   "annotationPosition": "not json"}}
+    raw = {
+        "key": "ANN1",
+        "data": {"itemType": "annotation", "parentItem": "ATT1", "annotationPosition": "not json"},
+    }
     assert to_annotation(raw).page_index is None
 
 
 def test_note_title_is_derived_from_its_first_line():
-    raw = {"key": "N1", "data": {"itemType": "note", "parentItem": "ABCD2345",
-                                 "note": "<p>Key finding</p><p>More detail</p>"}}
+    raw = {
+        "key": "N1",
+        "data": {
+            "itemType": "note",
+            "parentItem": "ABCD2345",
+            "note": "<p>Key finding</p><p>More detail</p>",
+        },
+    }
     note = to_note(raw)
     assert note.title == "Key finding"
     assert note.text == "Key finding\nMore detail"

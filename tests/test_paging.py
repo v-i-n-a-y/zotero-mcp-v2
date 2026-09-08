@@ -66,11 +66,19 @@ def test_shown_range_is_one_based():
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
-        (None, 20), ("", 20), (5, 5), ("5", 5), ("5.0", 5),
-        (0, 1), (-3, 1),              # clamped up to the minimum
-        (5000, 100), ("5000", 100),   # clamped down to the maximum
-        ("all", 100), ("MAX", 100),
-        ("banana", 20), ([], 20),     # unusable input falls back to the default
+        (None, 20),
+        ("", 20),
+        (5, 5),
+        ("5", 5),
+        ("5.0", 5),
+        (0, 1),
+        (-3, 1),  # clamped up to the minimum
+        (5000, 100),
+        ("5000", 100),  # clamped down to the maximum
+        ("all", 100),
+        ("MAX", 100),
+        ("banana", 20),
+        ([], 20),  # unusable input falls back to the default
     ],
 )
 def test_normalize_page_size(value, expected):
@@ -96,7 +104,7 @@ def test_clamp_falls_back_to_a_space():
     text = " ".join(["word"] * 100)
     result = clamp(text, 100)
     assert result.truncated
-    assert not result.text.endswith("wor")   # never mid-word
+    assert not result.text.endswith("wor")  # never mid-word
     assert len(result.text) <= 100
 
 

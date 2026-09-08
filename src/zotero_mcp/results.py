@@ -50,9 +50,11 @@ def reply(
     if structured is None or not allow_structured:
         return text
 
-    payload = structured.model_dump(mode="json", exclude_none=True) if isinstance(
-        structured, BaseModel
-    ) else structured
+    payload = (
+        structured.model_dump(mode="json", exclude_none=True)
+        if isinstance(structured, BaseModel)
+        else structured
+    )
 
     from fastmcp.tools import ToolResult
 

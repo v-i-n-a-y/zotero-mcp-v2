@@ -63,6 +63,7 @@ _cache: dict[str, Any] | None = None
 # Loading
 # ---------------------------------------------------------------------------
 
+
 def _cache_path() -> Path:
     if override := os.environ.get("ZOTERO_MCP_SCHEMA_CACHE"):
         return Path(override)
@@ -121,6 +122,7 @@ def reset_cache() -> None:
 # ---------------------------------------------------------------------------
 # Queries
 # ---------------------------------------------------------------------------
+
 
 def schema_version() -> int:
     """Version number of the schema table currently in use."""
@@ -251,6 +253,7 @@ def suggest_field(item_type: str, field: str, limit: int = 3) -> list[str]:
 # Refresh
 # ---------------------------------------------------------------------------
 
+
 def _should_attempt(meta: dict[str, Any], now: float) -> bool:
     last_success = meta.get("_fetched_at", 0)
     last_failure = meta.get("_failed_at", 0)
@@ -334,7 +337,9 @@ def _trim(payload: dict[str, Any]) -> dict[str, Any]:
             if actual:
                 fields[actual] = field.get("baseField", actual)
         item_type_map[name] = fields
-        creators = [c.get("creatorType") for c in entry.get("creatorTypes", []) if c.get("creatorType")]
+        creators = [
+            c.get("creatorType") for c in entry.get("creatorTypes", []) if c.get("creatorType")
+        ]
         if creators:
             creator_map[name] = creators
 
