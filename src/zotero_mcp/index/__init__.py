@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 import threading
 from contextlib import suppress
 from dataclasses import dataclass
@@ -83,6 +84,88 @@ def semantic_available() -> bool:
     except ImportError:
         return False
     return True
+
+
+_STOPWORDS = frozenset(
+    [
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "for",
+        "from",
+        "how",
+        "in",
+        "is",
+        "it",
+        "its",
+        "of",
+        "on",
+        "or",
+        "that",
+        "the",
+        "this",
+        "to",
+        "was",
+        "what",
+        "which",
+        "with",
+    ]
+)
+_DISPLAY_TOLERANCE = (
+    0.15  # a term-bearing passage may trail the best by this much and still be shown
+)
+
+
+def _query_terms(query: str) -> list[str]:
+    """Content words of *query*, lowercased, crude-stemmed to their first 5+ letters."""
+    words = re.findall(r"[a-z0-9]+", query.lower())
+    terms = [w[:6] if len(w) > 6 else w for w in words if len(w) >= 3 and w not in _STOPWORDS]
+    return list(dict.fromkeys(terms))
+
+
+def _term_hits(text: str, terms: list[str]) -> int:
+    low = text.lower()
+    return sum(1 for t in terms if t in low)
+
+
+def _display_passage(
+    passages: list[tuple[float, str, dict[str, Any]]], terms: list[str]
+) -> tuple[float, str, dict[str, Any]]:
+    """Pick the passage to show for an item.
+
+    The top-scoring chunk is usually right, but for a long paper with dozens of
+    on-topic chunks the reranker's favourite can be an oblique one. Among the
+    chunks nearly as good as the best, prefer the one that literally mentions
+    the most query terms; a reader can see at once why it matched.
+    """
+    best_score = passages[0][0]
+    close = [p for p in passages if p[0] >= best_score - _DISPLAY_TOLERANCE]
+    return max(close, key=lambda p: (_term_hits(p[1], terms), p[0]))
+
+
+def _focus(doc: str, terms: list[str]) -> str:
+    """Start the passage at the sentence that mentions the most query terms.
+
+    Callers truncate passages for display, so text before the relevant
+    sentence would otherwise push the actual match out of view.
+    """
+    if not terms:
+        return doc
+    pieces = re.split(r"(?<=[.!?])\s+|\n+", doc)
+    best_i, best_hits = 0, 0
+    for i, piece in enumerate(pieces):
+        hits = _term_hits(piece, terms)
+        if hits > best_hits:
+            best_i, best_hits = i, hits
+    if best_hits == 0 or best_i == 0:
+        return doc
+    # Keep one sentence of lead-in for context.
+    return " ".join(pieces[best_i - 1 :]).strip()
 
 
 class SemanticIndex:
@@ -481,30 +564,35 @@ class SemanticIndex:
         if reranker is not None and documents:
             scores = self._rerank(reranker, query, documents, scores)
 
-        best: dict[str, Hit] = {}
-        seen: dict[str, int] = {}
+        # Group the pool by item, keeping every candidate passage.
+        by_item: dict[str, list[tuple[float, str, dict[str, Any]]]] = {}
         for meta, doc, score in zip(metadatas, documents, scores, strict=False):
-            key = meta["item_key"]
             score *= 1.0 - _CITATION_PENALTY * float(meta.get("cite_density") or 0.0)
-            seen[key] = seen.get(key, 0) + 1
-            if key not in best or score > best[key].score:
-                best[key] = Hit(
-                    item_key=key,
-                    score=score,
-                    matched_text=doc,
-                    metadata=meta,
-                    kind=str(meta.get("kind") or "metadata"),
-                )
+            by_item.setdefault(meta["item_key"], []).append((score, doc, meta))
 
-        for key, hit in best.items():
-            hit.evidence = seen[key]
+        terms = _query_terms(query)
+        hits: list[Hit] = []
+        for key, passages in by_item.items():
+            passages.sort(key=lambda t: t[0], reverse=True)
+            best_score = passages[0][0]
             # Several matching passages is stronger evidence than one, but never
             # enough to overtake a clearly better single match.
-            extra = min(hit.evidence - 1, 5) / 5
-            hit.score = round(hit.score + (1.0 - hit.score) * _CORROBORATION_BONUS * extra, 4)
+            extra = min(len(passages) - 1, 5) / 5
+            score = round(best_score + (1.0 - best_score) * _CORROBORATION_BONUS * extra, 4)
+            _, doc, meta = _display_passage(passages, terms)
+            hits.append(
+                Hit(
+                    item_key=key,
+                    score=score,
+                    matched_text=_focus(doc, terms),
+                    metadata=meta,
+                    kind=str(meta.get("kind") or "metadata"),
+                    evidence=len(passages),
+                )
+            )
 
-        ranked = sorted(best.values(), key=lambda h: h.score, reverse=True)
-        return ranked[:limit]
+        hits.sort(key=lambda h: h.score, reverse=True)
+        return hits[:limit]
 
     @staticmethod
     def _where(

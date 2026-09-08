@@ -274,3 +274,25 @@ def test_where_clause_shapes():
     assert SemanticIndex._where(None, 2000, 2010, "K") == {
         "$and": [{"year_num": {"$gte": 2000}}, {"year_num": {"$lte": 2010}}, {"col_K": True}]
     }
+
+
+def test_display_passage_prefers_term_bearing_chunk_when_close():
+    from zotero_mcp.index import _display_passage, _focus, _query_terms
+
+    terms = _query_terms("Thermal control of the CubeSats")
+    assert terms == ["therma", "contro", "cubesa"]
+    passages = [
+        (0.90, "COTS components are usually adopted.", {"k": 1}),
+        (0.85, "Passive thermal control keeps the payload warm.", {"k": 2}),
+        (0.50, "Thermal thermal thermal.", {"k": 3}),
+    ]
+    assert _display_passage(passages, terms)[2] == {"k": 2}
+    # Too far behind the best: fall back to the best.
+    assert _display_passage([passages[0], passages[2]], terms)[2] == {"k": 1}
+    # No term anywhere: best.
+    assert _display_passage(passages[:1], terms)[2] == {"k": 1}
+
+    doc = "Launch slots are scarce. CubeSats are small. Passive thermal control is used. More."
+    # The sentence with most terms wins, with one sentence of lead-in.
+    assert _focus(doc, terms).startswith("CubeSats are small. Passive thermal control")
+    assert _focus("no match here", terms) == "no match here"
