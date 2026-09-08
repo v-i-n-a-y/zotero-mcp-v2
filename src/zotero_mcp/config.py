@@ -124,12 +124,20 @@ class SemanticSettings:
     enabled: bool = True
     #: "default" (local sentence-transformers), "openai", or "gemini".
     embedding_provider: str = "default"
+    #: Model name for the provider. Empty picks the provider's default
+    #: (locally: BAAI/bge-small-en-v1.5, a 512-token retrieval model).
     embedding_model: str | None = None
+    #: Re-score the top chunks with a cross-encoder before ranking items.
+    #: Slower per query (~0.3 s on Apple silicon) but markedly more precise.
+    rerank: bool = True
+    rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     #: Where ChromaDB persists. Empty means the default under the config dir.
     db_path: str | None = None
     #: "manual", "startup", "daily", or "weekly".
     update_schedule: str = "manual"
-    chunk_chars: int = 2_000
+    #: ~1,500 chars is ~350 tokens: comfortably inside the 512-token window of
+    #: the default model, so nothing in a chunk goes unread.
+    chunk_chars: int = 1_500
     chunk_overlap_chars: int = 200
     #: Include attachment fulltext in the index, not just metadata.
     index_fulltext: bool = True
@@ -261,6 +269,8 @@ def _env_overrides() -> dict[str, dict[str, Any]]:
         semantic["embedding_model"] = v
     if v := os.environ.get("ZOTERO_MCP_DB_PATH"):
         semantic["db_path"] = v
+    if (b := _env_bool("ZOTERO_MCP_RERANK")) is not None:
+        semantic["rerank"] = b
 
     network: dict[str, Any] = {}
     if v := os.environ.get("ZOTERO_MCP_CONTACT_EMAIL"):

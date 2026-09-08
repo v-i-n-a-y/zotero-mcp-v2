@@ -261,11 +261,32 @@ def register_tools(mcp: Any, config: ZoteroConfig, backend: ZoteroBackend) -> No
                 ),
             ],
             limit: Annotated[int | None, Field(description="Max items to return.")] = None,
+            item_type: Annotated[
+                str | None,
+                Field(
+                    description="Restrict to one Zotero item type, e.g. 'journalArticle', 'book', 'thesis'."
+                ),
+            ] = None,
+            year_from: Annotated[
+                int | None, Field(description="Only items published in this year or later.")
+            ] = None,
+            year_to: Annotated[
+                int | None, Field(description="Only items published in this year or earlier.")
+            ] = None,
+            collection_key: Annotated[
+                str | None,
+                Field(description="Only items in this collection (key from `list_collections`)."),
+            ] = None,
         ) -> Any:
             """Find items by meaning using the vector index. Each hit shows the passage that matched.
 
             Complements `search_library` (exact-word matching): use this when you
-            know the idea but not the wording. Requires the index to have been built.
+            know the idea but not the wording. Phrase the query as a topic, claim,
+            or question rather than keywords. Results are reranked by a
+            cross-encoder; `matched_in` says whether the title/abstract or a
+            fulltext passage matched, and `evidence` counts matching passages.
+            Filters narrow by type, year range, or collection. Requires the index
+            to have been built (`zotero-mcp index build`).
             """
             if not semantic_available():
                 raise Unsupported(
@@ -279,7 +300,18 @@ def register_tools(mcp: Any, config: ZoteroConfig, backend: ZoteroBackend) -> No
                     hint="Run `zotero-mcp index build` from a terminal, then retry.",
                 )
             size = _page_size(limit)
-            hits = index.search(query, limit=size)
+            if item_type and not schema.is_item_type(item_type):
+                raise InvalidInput(f"Unknown item type {item_type!r}.")
+            if year_from is not None and year_to is not None and year_from > year_to:
+                raise InvalidInput("year_from must not be after year_to.")
+            hits = index.search(
+                query,
+                limit=size,
+                item_type=item_type,
+                year_from=year_from,
+                year_to=year_to,
+                collection_key=collection_key,
+            )
             items = [
                 ItemSummary(
                     key=h.item_key,
@@ -290,6 +322,8 @@ def register_tools(mcp: Any, config: ZoteroConfig, backend: ZoteroBackend) -> No
                     publication=h.metadata.get("publication") or None,
                     score=round(h.score, 3),
                     matched_text=_snippet(h.matched_text, limits.abstract_preview_chars),
+                    matched_in=h.kind,
+                    evidence=h.evidence,
                     zotero_uri=mapping.zotero_uri(h.item_key, library),
                 )
                 for h in hits

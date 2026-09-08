@@ -1,6 +1,12 @@
 """Embeddable text: metadata documents and chunking are pure and predictable."""
 
-from zotero_mcp.content import chunk_text, extract_text, metadata_document
+from zotero_mcp.content import (
+    chunk_text,
+    citation_density,
+    extract_text,
+    metadata_document,
+    strip_references,
+)
 
 
 def test_metadata_document_orders_title_first_then_creators_and_abstract():
@@ -72,3 +78,23 @@ def test_extract_text_plain_and_html():
 def test_extract_text_bad_pdf_does_not_raise():
     # Garbage bytes labelled as PDF: must degrade to "" rather than raise.
     assert extract_text(b"not really a pdf", "application/pdf", "x.pdf") == ""
+
+
+def test_strip_references_removes_trailing_section_only():
+    body = "Intro. " * 100
+    text = body + "\nREFERENCES\n[1] A. Author, J. Stuff 2001."
+    assert strip_references(text).rstrip() == body.rstrip()
+    # A heading early in the text (e.g. a contents page) is left alone.
+    early = "References\n" + body
+    assert strip_references(early) == early
+    assert strip_references("") == ""
+
+
+def test_citation_density_separates_prose_from_bibliography():
+    prose = (
+        "The nozzle expands the hot gas to supersonic speed, converting enthalpy to kinetic energy."
+    )
+    bib = "[12] J. Smith, K. Lee, Erosion in Hall thrusters, J. Propul. Power 25 (2009) 105-117. doi:10.2514/1.3"
+    assert citation_density(prose) < 0.1
+    assert citation_density(bib) > 0.5
+    assert citation_density("") == 0.0

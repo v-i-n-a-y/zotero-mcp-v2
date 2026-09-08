@@ -15,12 +15,19 @@ Design choices that set this apart from a naive port:
   without a single live Zotero call — the index is useful even offline.
 * **Fingerprinted.** The embedding provider and model are stored on the
   collection; changing either resets the store rather than silently mixing
-  incompatible vectors.
+  incompatible vectors. Extracted fulltext is cached beside the store, so a
+  model change re-embeds in minutes instead of re-downloading every PDF.
+* **Reranked and filtered.** Candidates come from the vector index, then a
+  cross-encoder re-scores the query against each passage (far more precise
+  than embedding similarity alone). Bibliography-like passages are penalised,
+  items with several matching passages get a small corroboration bonus, and
+  results can be restricted by item type, year range, or collection.
 """
 
 from __future__ import annotations
 
 import logging
+import math
 import threading
 from contextlib import suppress
 from dataclasses import dataclass
@@ -36,8 +43,11 @@ logger = logging.getLogger(__name__)
 
 _COLLECTION = "zotero_library"
 _CHILD_TYPES = {"attachment", "note", "annotation"}
-_DEFAULT_LOCAL_MODEL = "all-MiniLM-L6-v2"
+_DEFAULT_LOCAL_MODEL = "BAAI/bge-small-en-v1.5"
 _PAGE = 2_000  # rows per store read; keeps well under SQLite's variable limit
+_RERANK_POOL = 60  # chunks re-scored by the cross-encoder per query
+_CORROBORATION_BONUS = 0.10  # max lift for an item with several matching passages
+_CITATION_PENALTY = 0.6  # score multiplier at full citation density
 
 
 @dataclass
@@ -48,6 +58,10 @@ class Hit:
     score: float
     matched_text: str
     metadata: dict[str, Any]
+    #: "metadata" (title/abstract matched) or "fulltext" (a passage matched).
+    kind: str = "metadata"
+    #: How many of this item's passages were in the candidate pool.
+    evidence: int = 1
 
 
 @dataclass
@@ -58,6 +72,7 @@ class BuildStats:
     removed: int = 0
     chunks: int = 0
     fulltext_items: int = 0
+    fulltext_cache_hits: int = 0
 
 
 def semantic_available() -> bool:
@@ -78,6 +93,7 @@ class SemanticIndex:
         self.settings = config.semantic
         self.limits = config.limits
         self._collection: Any = None
+        self._reranker: Any = None
 
     # -- wiring -------------------------------------------------------------
 
@@ -118,6 +134,20 @@ class SemanticIndex:
                 model_name=self.settings.embedding_model or "models/text-embedding-004"
             )
         raise Unsupported(f"Unknown embedding provider {provider!r}.")
+
+    def _cross_encoder(self) -> Any:
+        """The reranking model, loaded once; ``None`` when reranking is off."""
+        if not self.settings.rerank:
+            return None
+        if self._reranker is None:
+            from sentence_transformers import CrossEncoder
+
+            self._reranker = CrossEncoder(self.settings.rerank_model)
+        return self._reranker
+
+    @property
+    def fulltext_cache_dir(self) -> Path:
+        return self.db_path / "fulltext"
 
     @property
     def collection(self) -> Any:
@@ -160,6 +190,7 @@ class SemanticIndex:
                 return
             with suppress(Exception):  # failures resurface on the first real call
                 self.collection.count()
+                self._cross_encoder()
 
         # Short delay so the MCP handshake completes before model loading
         # (which holds the GIL for a few seconds) begins.
@@ -255,7 +286,7 @@ class SemanticIndex:
             col.delete(where={"item_key": key})
 
             docs, metas, ids, had_fulltext = self._chunks_for(
-                key, data, children.get(key, []), backend
+                key, data, children.get(key, []), backend, stats
             )
             if docs:
                 col.add(ids=ids, documents=docs, metadatas=metas)
@@ -275,7 +306,12 @@ class SemanticIndex:
         return stats
 
     def _chunks_for(
-        self, key: str, data: dict[str, Any], child_items: list[dict[str, Any]], backend: Any
+        self,
+        key: str,
+        data: dict[str, Any],
+        child_items: list[dict[str, Any]],
+        backend: Any,
+        stats: BuildStats,
     ) -> tuple[list[str], list[dict[str, Any]], list[str], bool]:
         summary_meta = self._summary_meta(key, data)
         version = int(data.get("version") or 0)
@@ -287,11 +323,13 @@ class SemanticIndex:
         # item's version for incremental rebuilds.
         meta_doc = content.metadata_document(data) or summary_meta["title"]
         docs.append(meta_doc)
-        metas.append({**summary_meta, "item_version": version, "kind": "metadata"})
+        metas.append(
+            {**summary_meta, "item_version": version, "kind": "metadata", "cite_density": 0.0}
+        )
 
         had_fulltext = False
         if self.settings.index_fulltext:
-            fulltext = self._gather_fulltext(child_items, backend)
+            fulltext = content.strip_references(self._gather_fulltext(child_items, backend, stats))
             if fulltext:
                 had_fulltext = True
                 for chunk in content.chunk_text(
@@ -300,12 +338,21 @@ class SemanticIndex:
                     overlap=self.settings.chunk_overlap_chars,
                 ):
                     docs.append(chunk)
-                    metas.append({**summary_meta, "item_version": version, "kind": "fulltext"})
+                    metas.append(
+                        {
+                            **summary_meta,
+                            "item_version": version,
+                            "kind": "fulltext",
+                            "cite_density": round(content.citation_density(chunk), 3),
+                        }
+                    )
 
         ids = [f"{key}#{i}" for i in range(len(docs))]
         return docs, metas, ids, had_fulltext
 
-    def _gather_fulltext(self, child_items: list[dict[str, Any]], backend: Any) -> str:
+    def _gather_fulltext(
+        self, child_items: list[dict[str, Any]], backend: Any, stats: BuildStats
+    ) -> str:
         parts: list[str] = []
         for child in child_items:
             cdata = child.get("data", {})
@@ -314,12 +361,46 @@ class SemanticIndex:
             ckey = cdata.get("key")
             if not ckey:
                 continue
-            text = backend.fulltext(ckey)  # Zotero's own index first
-            if not text:
-                text = self._extract_child(ckey, cdata, backend)
+            cversion = int(child.get("version") or cdata.get("version") or 0)
+            cached = self._cached_fulltext(ckey, cversion)
+            if cached is not None:
+                stats.fulltext_cache_hits += 1
+                text = cached
+            else:
+                text = backend.fulltext(ckey) or ""  # Zotero's own index first
+                if not text:
+                    text = self._extract_child(ckey, cdata, backend)
+                self._store_fulltext(ckey, cversion, text)
             if text:
                 parts.append(text)
         return "\n\n".join(parts).strip()
+
+    def _cache_file(self, ckey: str, version: int) -> Path:
+        return self.fulltext_cache_dir / f"{ckey}-{version}.txt"
+
+    def _cached_fulltext(self, ckey: str, version: int) -> str | None:
+        """Extracted text for an attachment at *version*, or ``None`` if unseen.
+
+        An empty file is a real cache entry: "we looked, there was nothing",
+        which saves re-downloading a PDF that has no extractable text.
+        """
+        path = self._cache_file(ckey, version)
+        try:
+            return path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return None
+        except OSError as exc:
+            logger.info("Fulltext cache unreadable for %s: %s", ckey, exc)
+            return None
+
+    def _store_fulltext(self, ckey: str, version: int, text: str) -> None:
+        try:
+            self.fulltext_cache_dir.mkdir(parents=True, exist_ok=True)
+            for stale in self.fulltext_cache_dir.glob(f"{ckey}-*.txt"):
+                stale.unlink(missing_ok=True)
+            self._cache_file(ckey, version).write_text(text, encoding="utf-8")
+        except OSError as exc:  # the cache is an optimisation, never a requirement
+            logger.info("Could not cache fulltext for %s: %s", ckey, exc)
 
     def _extract_child(self, ckey: str, cdata: dict[str, Any], backend: Any) -> str:
         content_type = cdata.get("contentType")
@@ -337,49 +418,128 @@ class SemanticIndex:
     @staticmethod
     def _summary_meta(key: str, data: dict[str, Any]) -> dict[str, Any]:
         creators = creators_of(data)
-        return {
+        year = year_of(data.get("date")) or ""
+        meta: dict[str, Any] = {
             "item_key": key,
             "title": str(data.get("title") or "Untitled"),
             "item_type": str(data.get("itemType") or "document"),
-            "year": year_of(data.get("date")) or "",
+            "year": year,
+            # Numeric twin of ``year`` so range filters work; 0 = unknown.
+            "year_num": int(year) if year.isdigit() else 0,
             "creator_summary": creator_summary(creators) or "",
             "publication": str(
                 data.get("publicationTitle") or data.get("bookTitle") or data.get("publisher") or ""
             ),
         }
+        # Chroma metadata is flat scalars, so collection membership becomes
+        # one boolean flag per collection: ``{"col_ABCD1234": True}``.
+        for ckey in data.get("collections") or []:
+            meta[f"col_{ckey}"] = True
+        return meta
 
     # -- search -------------------------------------------------------------
 
-    def search(self, query: str, *, limit: int) -> list[Hit]:
-        """Return up to *limit* items, best-matching passage per item."""
+    def search(
+        self,
+        query: str,
+        *,
+        limit: int,
+        item_type: str | None = None,
+        year_from: int | None = None,
+        year_to: int | None = None,
+        collection_key: str | None = None,
+    ) -> list[Hit]:
+        """Return up to *limit* items, best-matching passage per item.
+
+        Pipeline: vector recall of a candidate pool (filtered by metadata),
+        optional cross-encoder rerank of that pool, citation-density penalty,
+        collapse to one hit per item with a corroboration bonus, sort.
+        """
         self._require()
         if not query.strip():
             return []
         col = self.collection
-        if col.count() == 0:
+        total = col.count()
+        if total == 0:
             return []
 
+        where = self._where(item_type, year_from, year_to, collection_key)
         # Over-fetch chunks so that collapsing to distinct items still fills the
         # page: a long, on-topic paper can own dozens of the top chunks.
-        n = max(limit * 25, 100)
+        n = min(max(limit * 25, 100), total)
         res = col.query(
             query_texts=[query],
-            n_results=min(n, col.count()),
+            n_results=n,
+            where=where,
             include=["documents", "metadatas", "distances"],
         )
         metadatas = res["metadatas"][0]
         documents = res["documents"][0]
-        distances = res["distances"][0]
+        scores = [1.0 - float(d) for d in res["distances"][0]]  # cosine distance -> similarity
+
+        reranker = self._cross_encoder()
+        if reranker is not None and documents:
+            scores = self._rerank(reranker, query, documents, scores)
 
         best: dict[str, Hit] = {}
-        for meta, doc, dist in zip(metadatas, documents, distances, strict=False):
+        seen: dict[str, int] = {}
+        for meta, doc, score in zip(metadatas, documents, scores, strict=False):
             key = meta["item_key"]
-            score = 1.0 - float(dist)  # cosine distance -> similarity
+            score *= 1.0 - _CITATION_PENALTY * float(meta.get("cite_density") or 0.0)
+            seen[key] = seen.get(key, 0) + 1
             if key not in best or score > best[key].score:
-                best[key] = Hit(item_key=key, score=score, matched_text=doc, metadata=meta)
+                best[key] = Hit(
+                    item_key=key,
+                    score=score,
+                    matched_text=doc,
+                    metadata=meta,
+                    kind=str(meta.get("kind") or "metadata"),
+                )
+
+        for key, hit in best.items():
+            hit.evidence = seen[key]
+            # Several matching passages is stronger evidence than one, but never
+            # enough to overtake a clearly better single match.
+            extra = min(hit.evidence - 1, 5) / 5
+            hit.score = round(hit.score + (1.0 - hit.score) * _CORROBORATION_BONUS * extra, 4)
 
         ranked = sorted(best.values(), key=lambda h: h.score, reverse=True)
         return ranked[:limit]
+
+    @staticmethod
+    def _where(
+        item_type: str | None,
+        year_from: int | None,
+        year_to: int | None,
+        collection_key: str | None,
+    ) -> dict[str, Any] | None:
+        clauses: list[dict[str, Any]] = []
+        if item_type:
+            clauses.append({"item_type": item_type})
+        if year_from is not None:
+            clauses.append({"year_num": {"$gte": int(year_from)}})
+        if year_to is not None:
+            clauses.append({"year_num": {"$lte": int(year_to)}})
+        if collection_key:
+            clauses.append({f"col_{collection_key}": True})
+        if not clauses:
+            return None
+        return clauses[0] if len(clauses) == 1 else {"$and": clauses}
+
+    @staticmethod
+    def _rerank(
+        reranker: Any, query: str, documents: list[str], scores: list[float]
+    ) -> list[float]:
+        """Re-score the top of the pool with the cross-encoder.
+
+        Cross-encoder logits are squashed to ``(0, 1)`` so they sit on the same
+        scale as cosine similarity; chunks outside the reranked pool keep their
+        vector score, which is always below the reranked ones in practice.
+        """
+        pool = min(_RERANK_POOL, len(documents))
+        logits = reranker.predict([(query, doc) for doc in documents[:pool]])
+        reranked = [1.0 / (1.0 + math.exp(-float(x))) for x in logits]
+        return reranked + scores[pool:]
 
 
 __all__ = ["BuildStats", "Hit", "SemanticIndex", "semantic_available"]

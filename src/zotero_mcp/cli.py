@@ -110,7 +110,8 @@ def _cmd_index(args: argparse.Namespace) -> int:
     stats = index.build(backend, progress=progress)
     print(
         f"Done. added={stats.added} updated={stats.updated} unchanged={stats.skipped} "
-        f"removed={stats.removed} chunks={stats.chunks} with_fulltext={stats.fulltext_items}"
+        f"removed={stats.removed} chunks={stats.chunks} with_fulltext={stats.fulltext_items} "
+        f"fulltext_cache_hits={stats.fulltext_cache_hits}"
     )
     return 0
 

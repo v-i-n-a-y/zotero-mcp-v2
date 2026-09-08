@@ -149,6 +149,10 @@ class ItemSummary(_Model):
     #: Populated by semantic search only.
     score: float | None = None
     matched_text: str | None = None
+    #: Where the match came from: "metadata" (title/abstract) or "fulltext".
+    matched_in: str | None = None
+    #: Number of this item's passages that matched the query.
+    evidence: int | None = None
     #: Deep link that opens the item in the Zotero desktop client.
     zotero_uri: str | None = None
 

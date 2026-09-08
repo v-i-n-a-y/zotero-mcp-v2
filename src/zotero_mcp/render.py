@@ -85,6 +85,10 @@ def _bullet(summary: ItemSummary, index: int | None = None) -> str:
         refs.append("PDF")
     if summary.score is not None:
         refs.append(f"score {summary.score:.2f}")
+    if summary.matched_in:
+        where = "title/abstract" if summary.matched_in == "metadata" else summary.matched_in
+        n = summary.evidence or 1
+        refs.append(f"matched in {where}" + (f" ({n} passages)" if n > 1 else ""))
     lines.append(f"  {' · '.join(refs)}")
 
     if summary.matched_text:

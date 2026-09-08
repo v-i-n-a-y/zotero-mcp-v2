@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 from typing import Any
 
 from zotero_mcp.mapping import creators_of, strip_html, year_of
@@ -156,4 +157,57 @@ def _extract_epub(data: bytes) -> str:
     return "\n".join(parts).strip()
 
 
-__all__ = ["chunk_text", "extract_text", "metadata_document"]
+# -- fulltext hygiene ---------------------------------------------------------
+
+_REFERENCE_HEADING = re.compile(
+    r"^\s*(?:\d+\.?\s*)?(?:references|bibliography|works cited|literature cited|reference list)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+# Things that look like the guts of a bibliography entry.
+_CITATION_MARKERS = re.compile(
+    r"\[\d+\]|\(\d{4}[a-z]?\)|\b(?:vol|no|pp|doi|et al)\b\.?|https?://|"
+    r"\b(?:proc|conf|journal|j\.|trans|ieee|aiaa|iepc)\b",
+    re.IGNORECASE,
+)
+
+
+def strip_references(text: str) -> str:
+    """Drop a trailing reference list from extracted fulltext.
+
+    A bibliography is dense with topical keywords and author names, so its
+    chunks attract embedding matches far out of proportion to their usefulness.
+    Only a "References"-style heading in the *last 40%* of the text counts;
+    an early heading (say, in a table of contents) is not the real thing.
+    """
+    if not text:
+        return text
+    floor = int(len(text) * 0.6)
+    last = None
+    for match in _REFERENCE_HEADING.finditer(text):
+        if match.start() >= floor:
+            last = match
+    return text[: last.start()].rstrip() if last else text
+
+
+def citation_density(chunk: str) -> float:
+    """Roughly how much of *chunk* is citation apparatus, in ``[0, 1]``.
+
+    Used to down-weight bibliography-like passages that slipped past
+    :func:`strip_references` (papers without a heading, footnote-style refs).
+    """
+    words = chunk.split()
+    if not words:
+        return 0.0
+    markers = len(_CITATION_MARKERS.findall(chunk))
+    # Numbers and short tokens (page ranges, volumes, initials) are the other tell.
+    numeric = sum(1 for w in words if any(c.isdigit() for c in w))
+    return min(1.0, (markers * 3 + numeric) / len(words))
+
+
+__all__ = [
+    "chunk_text",
+    "citation_density",
+    "extract_text",
+    "metadata_document",
+    "strip_references",
+]

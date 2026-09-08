@@ -100,6 +100,7 @@ def _config(tmp_path, **overrides):
         db_path=str(tmp_path / "chroma"),
         chunk_chars=80,
         chunk_overlap_chars=10,
+        rerank=False,  # no model download in tests; the rerank path is unit-tested below
         **overrides,
     )
     return replace(base, semantic=semantic)
@@ -194,3 +195,82 @@ def test_clear_then_status_empty(index):
     index.build(FakeBackend([_item("A1", "Rocket")]))
     index.clear()
     assert index.status() == ("empty", 0)
+
+
+def test_filters_by_type_year_and_collection(index):
+    backend = FakeBackend(
+        [
+            _item("A1", "Rocket nozzles", date="2019-01-01", collections=["COL1"]),
+            _item("B2", "Rocket nozzles", date="2022-01-01", collections=["COL2"]),
+            {
+                **_item("C3", "Rocket nozzles", date="2022-01-01"),
+                "data": {**_item("C3", "Rocket nozzles", date="2022")["data"], "itemType": "book"},
+            },
+        ]
+    )
+    index.build(backend)
+    keys = lambda **kw: sorted(h.item_key for h in index.search("rocket nozzles", limit=10, **kw))  # noqa: E731
+    assert keys() == ["A1", "B2", "C3"]
+    assert keys(year_from=2020) == ["B2", "C3"]
+    assert keys(year_to=2020) == ["A1"]
+    assert keys(year_from=2020, year_to=2022, item_type="book") == ["C3"]
+    assert keys(collection_key="COL1") == ["A1"]
+    assert keys(collection_key="NOPE") == []
+
+
+def test_evidence_and_kind_reported(index):
+    text = "combustion instability in liquid rocket engines. " * 8
+    backend = FakeBackend(
+        [_item("A1", "Rocket nozzles"), _attachment("A1F", "A1")], fulltext={"A1F": text}
+    )
+    index.build(backend)
+    (hit,) = index.search("combustion instability rocket", limit=1)
+    assert hit.kind == "fulltext"
+    assert hit.evidence > 1
+    assert 0 < hit.score <= 1
+
+
+def test_reference_section_is_not_indexed(index):
+    body = "combustion instability in liquid rocket engines. " * 30
+    refs = "\nReferences\n" + "[1] Smith J. Combustion. J. Prop. 2001; vol 3, pp 1-9.\n" * 6
+    backend = FakeBackend(
+        [_item("A1", "Rocket"), _attachment("A1F", "A1")], fulltext={"A1F": body + refs}
+    )
+    index.build(backend)
+    docs = index.collection.get(include=["documents"])["documents"]
+    assert not any("Smith J." in d for d in docs)
+
+
+def test_fulltext_cache_avoids_refetch(index):
+    backend = FakeBackend(
+        [_item("A1", "Rocket"), _attachment("A1F", "A1")], fulltext={"A1F": "x " * 100}
+    )
+    index.build(backend)
+    assert (index.fulltext_cache_dir / "A1F-1.txt").exists()
+    # Same attachment version, new item version: text must come from the cache.
+    backend.items = [_item("A1", "Rocket revised", version=2), _attachment("A1F", "A1")]
+    backend._fulltext = {}  # would now return nothing if consulted
+    stats = index.build(backend)
+    assert stats.fulltext_cache_hits == 1 and stats.fulltext_items == 1
+
+
+def test_rerank_squashes_logits_and_keeps_tail(monkeypatch):
+    import zotero_mcp.index as mod
+
+    monkeypatch.setattr(mod, "_RERANK_POOL", 2)
+
+    class CE:
+        def predict(self, pairs):
+            assert len(pairs) == 2
+            return [4.0, -4.0]
+
+    out = SemanticIndex._rerank(CE(), "q", ["a", "b", "c"], [0.5, 0.4, 0.3])
+    assert out[0] > 0.98 and out[1] < 0.02 and out[2] == 0.3
+
+
+def test_where_clause_shapes():
+    assert SemanticIndex._where(None, None, None, None) is None
+    assert SemanticIndex._where("book", None, None, None) == {"item_type": "book"}
+    assert SemanticIndex._where(None, 2000, 2010, "K") == {
+        "$and": [{"year_num": {"$gte": 2000}}, {"year_num": {"$lte": 2010}}, {"col_K": True}]
+    }
