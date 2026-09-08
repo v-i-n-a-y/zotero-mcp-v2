@@ -1,0 +1,81 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "zotero-mcp-next"
+dynamic = ["version"]
+authors = [{ name = "Vinay" }]
+description = "A Model Context Protocol server for Zotero — typed backends, bounded responses, consolidated tools."
+keywords = ["zotero", "mcp", "model-context-protocol", "research", "citations", "bibliography"]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Text Processing :: Markup",
+]
+dependencies = [
+    "pyzotero>=1.6.0",
+    "mcp>=1.2.0",
+    "fastmcp>=2.14.0",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.28.0",
+    "unidecode>=1.3.0",
+]
+
+[project.optional-dependencies]
+pdf = ["pymupdf>=1.24.0", "ebooklib>=0.18", "markitdown[pdf]"]
+semantic = [
+    "chromadb>=0.4.0",
+    "sentence-transformers>=2.2.0",
+    "openai>=1.0.0",
+    "google-genai>=0.7.0",
+    "tiktoken>=0.7.0",
+]
+scite = ["requests>=2.28.0"]
+all = ["zotero-mcp-next[pdf,semantic,scite]"]
+dev = [
+    "zotero-mcp-next[all]",
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.9.0",
+    "mypy>=1.8.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/v-i-n-a-y/zotero-mcp-next"
+"Bug Tracker" = "https://github.com/v-i-n-a-y/zotero-mcp-next/issues"
+
+[project.scripts]
+zotero-mcp = "zotero_mcp.cli:main"
+zotero-mcp-next = "zotero_mcp.cli:main"
+
+[tool.hatch.version]
+path = "src/zotero_mcp/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/zotero_mcp"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E501", "B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+filterwarnings = ["error::DeprecationWarning:zotero_mcp.*"]
+
+[tool.mypy]
+python_version = "3.10"
+packages = ["zotero_mcp"]
+ignore_missing_imports = true
+warn_unused_ignores = true
