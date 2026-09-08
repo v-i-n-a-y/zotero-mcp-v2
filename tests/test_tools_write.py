@@ -239,3 +239,109 @@ def test_an_action_with_no_items_is_refused(fake_backend):
     with pytest.raises(ToolError) as excinfo:
         zotero_manage_items(action="trash", item_keys="")
     assert "No items" in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# Copying items into another library
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def target_library(monkeypatch):
+    """A second in-memory library, standing in for a group."""
+    from conftest import FakeBackend
+
+    target = FakeBackend(items=[])
+    monkeypatch.setattr("zotero_mcp.backends.factory.build_backend", lambda config: target)
+    return target
+
+
+def test_copying_previews_before_it_writes(fake_backend, target_library):
+    text = result_text(
+        zotero_manage_items(action="copy", item_keys="ATTN2345", target_library_id="98765")
+    )
+    assert "Would copy 1 item(s) into **Lab Library**" in text
+    assert "not carried across" in text
+    assert target_library.writes == []
+
+
+def test_copying_creates_new_items_in_the_target(fake_backend, target_library):
+    result = zotero_manage_items(
+        action="copy", item_keys="ATTN2345,KAHN3456", target_library_id="98765", dry_run=False
+    )
+    action, (payloads,) = target_library.writes[0]
+    assert action == "create_items"
+    assert [p["title"] for p in payloads] == [
+        "Attention Is All You Need",
+        "Thinking, Fast and Slow",
+    ]
+    assert result_data(result)["succeeded"] == ["NEWA2345", "NEWB2345"]
+
+
+def test_a_copy_carries_no_identity_from_the_original(fake_backend, target_library):
+    zotero_manage_items(
+        action="copy", item_keys="ATTN2345", target_library_id="98765", dry_run=False
+    )
+    payload = target_library.writes[0][1][0][0]
+    assert not {"key", "version", "dateAdded", "dateModified", "relations"} & set(payload)
+    assert payload["creators"][0]["lastName"] == "Vaswani"
+
+
+def test_a_copy_can_be_filed_straight_into_a_collection(fake_backend, target_library):
+    zotero_manage_items(
+        action="copy",
+        item_keys="ATTN2345",
+        target_library_id="98765",
+        target_collection_key="MACH2345",
+        dry_run=False,
+    )
+    assert target_library.writes[0][1][0][0]["collections"] == ["MACH2345"]
+
+
+def test_a_copy_is_not_filed_in_the_originals_collections(fake_backend, target_library):
+    """Collection keys mean nothing in another library, so they are dropped."""
+    zotero_manage_items(
+        action="copy", item_keys="ATTN2345", target_library_id="98765", dry_run=False
+    )
+    assert target_library.writes[0][1][0][0]["collections"] == []
+
+
+def test_copying_needs_a_target(fake_backend):
+    with pytest.raises(ToolError) as excinfo:
+        zotero_manage_items(action="copy", item_keys="ATTN2345")
+    assert "needs a target_library_id" in str(excinfo.value)
+
+
+def test_copying_into_the_open_library_is_refused(fake_backend):
+    with pytest.raises(ToolError) as excinfo:
+        zotero_manage_items(action="copy", item_keys="ATTN2345", target_library_id="12345")
+    assert "already open" in str(excinfo.value)
+
+
+def test_a_target_that_cannot_be_reached_is_reported(fake_backend, monkeypatch):
+    from conftest import FakeBackend
+
+    monkeypatch.setattr(
+        "zotero_mcp.backends.factory.build_backend",
+        lambda config: FakeBackend(items=[], reachable=False),
+    )
+    with pytest.raises(ToolError) as excinfo:
+        zotero_manage_items(
+            action="copy", item_keys="ATTN2345", target_library_id="98765", dry_run=False
+        )
+    assert "could not be reached" in str(excinfo.value)
+
+
+def test_an_unlisted_target_is_assumed_to_be_a_group(fake_backend, target_library, monkeypatch):
+    seen = {}
+    from zotero_mcp.backends import factory
+
+    monkeypatch.setattr(
+        factory,
+        "build_backend",
+        lambda config: seen.setdefault("config", config) and target_library,
+    )
+    zotero_manage_items(
+        action="copy", item_keys="ATTN2345", target_library_id="55555", dry_run=False
+    )
+    assert seen["config"].library.library_type.value == "group"

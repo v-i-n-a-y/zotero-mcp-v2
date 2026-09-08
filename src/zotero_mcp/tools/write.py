@@ -466,7 +466,7 @@ def zotero_update_item(
 @c.tool
 def zotero_manage_items(
     action: Annotated[
-        Literal["trash", "restore", "delete", "empty_trash", "list_trash"],
+        Literal["trash", "restore", "delete", "empty_trash", "list_trash", "copy"],
         Field(
             description=(
                 "'trash' is reversible and is almost always what you want. 'delete' "
@@ -480,8 +480,18 @@ def zotero_manage_items(
     ] = None,
     dry_run: Annotated[bool, Field(description="Preview without changing anything.")] = True,
     limit: Annotated[int | str | None, Field(description="Page size for list_trash.")] = None,
+    target_library_id: Annotated[
+        str | None, Field(description="For action='copy': the library to copy into.")
+    ] = None,
+    target_library_type: Annotated[
+        Literal["user", "group"] | None,
+        Field(description="For action='copy': whether the target is a group library."),
+    ] = None,
+    target_collection_key: Annotated[
+        str | None, Field(description="For action='copy': file the copies under this collection.")
+    ] = None,
 ) -> Any:
-    """Trash, restore or delete items."""
+    """Trash, restore, delete or copy items."""
     if action == "list_trash":
         from zotero_mcp.backends.base import RawPage
         from zotero_mcp.render import render_result_page
@@ -511,6 +521,11 @@ def zotero_manage_items(
     if not keys:
         raise InvalidInput(f"No items given to {action}.")
 
+    if action == "copy":
+        return _copy_items(
+            keys, target_library_id, target_library_type, target_collection_key, dry_run
+        )
+
     c.guard_destructive(dry_run, action=action, affected=len(keys))
     versions = c.item_versions(keys)
 
@@ -535,6 +550,93 @@ def zotero_manage_items(
         outcome = backend.delete_items(versions)
 
     result = c.outcome_to_result(outcome, action=action)
+    return c.respond(render_write_result(result), result)
+
+
+def _copy_items(
+    keys: list[str],
+    library_id: str | None,
+    library_type: str | None,
+    collection_key: str | None,
+    dry_run: bool,
+) -> Any:
+    """Copy items into another library, as new items.
+
+    Zotero has no cross-library move: the copies are genuinely new items with
+    their own keys, and the originals are left alone. Child notes and
+    attachments are not carried across, and that is said plainly rather than
+    left for the user to discover.
+    """
+    if not library_id:
+        raise InvalidInput(
+            "action='copy' needs a target_library_id.",
+            hint="Use zotero_library(action='list') to see the options.",
+        )
+
+    from dataclasses import replace as dataclass_replace
+
+    from zotero_mcp.backends.factory import build_backend
+    from zotero_mcp.config import LibraryType
+
+    active = c.runtime()
+    # The backend knows which library is actually open; the configuration may
+    # never have named one, as with the local API.
+    if str(library_id) == str(active.backend.library_ref().library_id):
+        raise InvalidInput(
+            "The target library is the one already open.",
+            hint="Use zotero_collections(action='add_items') to file items instead.",
+        )
+
+    known = {library.library_id: library for library in active.backend.list_libraries()}
+    chosen = known.get(str(library_id))
+    resolved_type = library_type or (chosen.library_type if chosen else "group")
+
+    payloads: list[dict[str, Any]] = []
+    titles: list[str] = []
+    for key in keys:
+        data = dict(c.require_item(key).get("data") or {})
+        titles.append(data.get("title") or key)
+        for managed in ("key", "version", "dateAdded", "dateModified", "relations"):
+            data.pop(managed, None)
+        data["collections"] = [collection_key] if collection_key else []
+        payloads.append(data)
+
+    if dry_run:
+        target_name = chosen.name if chosen else library_id
+        result = WriteResult(
+            action="copy_items",
+            dry_run=True,
+            succeeded=keys,
+            message=(
+                f"Would copy {len(payloads)} item(s) into **{target_name}** "
+                f"(`{library_id}`, {resolved_type}): {', '.join(titles[:10])}. "
+                "The copies are new items with new keys; the originals are untouched. "
+                "Child notes and attachments are not carried across."
+            ),
+        )
+        return c.respond(render_write_result(result), result)
+
+    target_library = dataclass_replace(
+        active.config.library,
+        library_id=str(library_id),
+        library_type=LibraryType(resolved_type),
+    )
+    target = build_backend(dataclass_replace(active.config, library=target_library))
+    if not target.ping():
+        raise NotFound(
+            f"Library {library_id} could not be reached with the current credentials.",
+            hint="Check the id, and that your API key has write access to that group.",
+        )
+
+    outcome = target.create_items(payloads)
+    result = c.outcome_to_result(
+        outcome,
+        action="copy_items",
+        message=(
+            f"Copied {len(outcome.succeeded)} item(s) into `{library_id}`. "
+            "Child notes and attachments were not carried across."
+        ),
+    )
     return c.respond(render_write_result(result), result)
 
 
