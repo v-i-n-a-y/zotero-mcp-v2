@@ -46,31 +46,52 @@ class Runtime:
 
 _runtime: Runtime | None = None
 
+#: Recorded when startup could not build a backend, and re-raised by the first
+#: tool that needs one. Keeping the original error means the caller is told
+#: "Zotero is not running, start it" rather than a generic "not initialised".
+_startup_error: Exception | None = None
+
 
 def get_runtime() -> Runtime:
     """The active runtime.
 
     Raises:
-        InternalError: Called before startup completed. Always a bug: tools
-            cannot run before the lifespan handler has installed a runtime.
+        The error that prevented startup, if there was one, so the caller gets
+        the actionable message rather than a symptom of it.
+        InternalError: No runtime and no recorded startup failure, which can
+            only mean a tool ran before the lifespan handler completed.
     """
-    if _runtime is None:
-        raise InternalError(
-            "The Zotero backend has not been initialised.",
-            hint="This is a bug: a tool ran before server startup completed.",
-        )
-    return _runtime
+    if _runtime is not None:
+        return _runtime
+    if _startup_error is not None:
+        raise _startup_error
+    raise InternalError(
+        "The Zotero backend has not been initialised.",
+        hint="This is a bug: a tool ran before server startup completed.",
+    )
+
+
+def set_startup_error(error: Exception | None) -> None:
+    """Record why startup could not build a backend."""
+    global _startup_error
+    _startup_error = error
+
+
+def startup_error() -> Exception | None:
+    return _startup_error
 
 
 def set_runtime(runtime: Runtime) -> None:
-    global _runtime
+    global _runtime, _startup_error
     _runtime = runtime
+    _startup_error = None
 
 
 def reset_runtime() -> None:
     """Drop the active runtime. For tests and for shutdown."""
-    global _runtime
+    global _runtime, _startup_error
     _runtime = None
+    _startup_error = None
 
 
 def initialise(
@@ -86,4 +107,12 @@ def initialise(
     return runtime
 
 
-__all__ = ["Runtime", "get_runtime", "initialise", "reset_runtime", "set_runtime"]
+__all__ = [
+    "Runtime",
+    "get_runtime",
+    "initialise",
+    "reset_runtime",
+    "set_runtime",
+    "set_startup_error",
+    "startup_error",
+]

@@ -183,7 +183,7 @@ def to_item_summary(
     key = raw.get("key") or data.get("key") or ""
     return ItemSummary(
         key=key,
-        title=data.get("title") or _fallback_title(data, item_type),
+        title=data.get("title") or title_of(data, item_type),
         item_type=item_type,
         version=raw.get("version") or data.get("version"),
         date=data.get("date"),
@@ -217,7 +217,7 @@ def _creator_summary(creators: list[Creator]) -> str | None:
     return f"{names[0]} et al."
 
 
-def _fallback_title(data: dict[str, Any], item_type: str) -> str:
+def title_of(data: dict[str, Any], item_type: str) -> str:
     """A title for types that store it under another name, or have none.
 
     Notes and attachments frequently have no title at all; showing "Untitled"
@@ -289,7 +289,7 @@ def to_item_detail(
 
     return ItemDetail(
         key=key,
-        title=data.get("title") or _fallback_title(data, item_type),
+        title=data.get("title") or title_of(data, item_type),
         item_type=item_type,
         version=raw.get("version") or data.get("version"),
         library=library,
@@ -317,7 +317,7 @@ def to_item_ref(raw: dict[str, Any]) -> ItemRef:
     item_type = data.get("itemType", "document")
     return ItemRef(
         key=raw.get("key") or data.get("key") or "",
-        title=data.get("title") or _fallback_title(data, item_type),
+        title=data.get("title") or title_of(data, item_type),
         item_type=item_type,
         year=year_of(data.get("date")),
         creator_summary=meta.get("creatorSummary") or _creator_summary(creators_of(data)),
@@ -437,6 +437,7 @@ __all__ = [
     "related_keys_of",
     "strip_html",
     "tags_of",
+    "title_of",
     "to_annotation",
     "to_attachment_ref",
     "to_collection_ref",
