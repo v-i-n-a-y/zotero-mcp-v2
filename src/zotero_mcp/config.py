@@ -133,8 +133,9 @@ class SemanticSettings:
     rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     #: Where ChromaDB persists. Empty means the default under the config dir.
     db_path: str | None = None
-    #: "manual", "startup", "daily", or "weekly".
-    update_schedule: str = "manual"
+    #: When the running server refreshes the index in the background:
+    #: "manual" (never; use the CLI), "startup", "daily", or "weekly".
+    update_schedule: str = "daily"
     #: ~1,500 chars is ~350 tokens: comfortably inside the 512-token window of
     #: the default model, so nothing in a chunk goes unread.
     chunk_chars: int = 1_500
@@ -271,6 +272,8 @@ def _env_overrides() -> dict[str, dict[str, Any]]:
         semantic["db_path"] = v
     if (b := _env_bool("ZOTERO_MCP_RERANK")) is not None:
         semantic["rerank"] = b
+    if v := os.environ.get("ZOTERO_MCP_INDEX_SCHEDULE"):
+        semantic["update_schedule"] = v
 
     network: dict[str, Any] = {}
     if v := os.environ.get("ZOTERO_MCP_CONTACT_EMAIL"):

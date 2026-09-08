@@ -10,6 +10,7 @@ the modules those calls route through, so a tool cannot forget to apply them.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Annotated, Any
 
 from pydantic import Field
@@ -43,6 +44,7 @@ def register_tools(mcp: Any, config: ZoteroConfig, backend: ZoteroBackend) -> No
     index = SemanticIndex(config) if config.semantic.enabled else None
     if index is not None:
         index.warm_up()
+        index.start_scheduler(backend)
 
     def _page_size(value: int | str | None) -> int:
         return normalize_page_size(
@@ -225,8 +227,13 @@ def register_tools(mcp: Any, config: ZoteroConfig, backend: ZoteroBackend) -> No
             warnings.append(str(exc))
 
         index_state, indexed = ("disabled", 0)
+        index_refreshed = None
         if index is not None:
             index_state, indexed = index.status()
+            if stamp := index.last_build():
+                index_refreshed = datetime.fromtimestamp(
+                    float(stamp["finished_at"]), tz=timezone.utc
+                ).isoformat(timespec="minutes")
             if index_state == "empty":
                 warnings.append("Semantic index is empty; run `zotero-mcp index build`.")
             elif index_state == "unavailable":
@@ -239,6 +246,8 @@ def register_tools(mcp: Any, config: ZoteroConfig, backend: ZoteroBackend) -> No
             schema_version=schema_version(),
             semantic_index=index_state,
             indexed_items=indexed if index is not None else None,
+            index_refreshed=index_refreshed,
+            index_schedule=config.semantic.update_schedule if index is not None else None,
             optional_features={
                 "semantic_search": index_state == "ready",
                 "writes": backend.can_write,

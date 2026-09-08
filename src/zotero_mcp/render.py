@@ -460,6 +460,8 @@ def render_health(report: HealthReport) -> str:
     lines.append(
         f"- **Semantic index:** {report.semantic_index}"
         + (f" ({report.indexed_items:,} items)" if report.indexed_items else "")
+        + (f", refreshed {report.index_refreshed}" if report.index_refreshed else "")
+        + (f", schedule {report.index_schedule}" if report.index_schedule else "")
     )
     if report.optional_features:
         lines += ["", "## Optional features", ""]

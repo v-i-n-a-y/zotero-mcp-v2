@@ -296,3 +296,18 @@ def test_display_passage_prefers_term_bearing_chunk_when_close():
     # The sentence with most terms wins, with one sentence of lead-in.
     assert _focus(doc, terms).startswith("CubeSats are small. Passive thermal control")
     assert _focus("no match here", terms) == "no match here"
+
+
+def test_build_writes_stamp_and_staleness_follows_schedule(index):
+    assert index.last_build() is None
+    assert index.is_stale()  # never built, daily schedule
+    index.build(FakeBackend([_item("A1", "Rocket")]))
+    stamp = index.last_build()
+    assert stamp and stamp["added"] == 1
+    assert not index.is_stale()
+    assert index.is_stale(now=stamp["finished_at"] + 86_401)
+
+
+def test_manual_schedule_is_never_stale(tmp_path, monkeypatch):
+    index = SemanticIndex(_config(tmp_path, update_schedule="manual"))
+    assert not index.is_stale()

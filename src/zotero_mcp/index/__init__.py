@@ -26,10 +26,12 @@ Design choices that set this apart from a naive port:
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import re
 import threading
+import time
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,6 +51,8 @@ _PAGE = 2_000  # rows per store read; keeps well under SQLite's variable limit
 _RERANK_POOL = 60  # chunks re-scored by the cross-encoder per query
 _CORROBORATION_BONUS = 0.10  # max lift for an item with several matching passages
 _CITATION_PENALTY = 0.6  # score multiplier at full citation density
+_SCHEDULE_SECONDS = {"startup": 0.0, "daily": 86_400.0, "weekly": 7 * 86_400.0}
+_SCHEDULE_POLL = 3_600.0  # how often the background scheduler re-checks staleness
 
 
 @dataclass
@@ -177,6 +181,10 @@ class SemanticIndex:
         self.limits = config.limits
         self._collection: Any = None
         self._reranker: Any = None
+        # Warm-up, scheduler, and tool calls can all open the store; chromadb's
+        # per-path client cache is not safe to initialise from two threads.
+        self._open_lock = threading.Lock()
+        self._build_lock = threading.Lock()
 
     # -- wiring -------------------------------------------------------------
 
@@ -233,33 +241,93 @@ class SemanticIndex:
         return self.db_path / "fulltext"
 
     @property
+    def stamp_path(self) -> Path:
+        return self.db_path / "last_build.json"
+
+    def last_build(self) -> dict[str, Any] | None:
+        """When the index was last brought up to date, and what changed; None if never."""
+        try:
+            return json.loads(self.stamp_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+
+    def _write_stamp(self, stats: BuildStats) -> None:
+        try:
+            self.stamp_path.write_text(
+                json.dumps({"finished_at": time.time(), **stats.__dict__}), encoding="utf-8"
+            )
+        except OSError as exc:
+            logger.info("Could not write index stamp: %s", exc)
+
+    # -- scheduling ---------------------------------------------------------
+
+    def is_stale(self, now: float | None = None) -> bool:
+        """Whether the schedule says the index should be refreshed now."""
+        interval = _SCHEDULE_SECONDS.get(self.settings.update_schedule)
+        if interval is None:  # "manual" or unknown: never auto-refresh
+            return False
+        stamp = self.last_build()
+        if stamp is None:
+            return True
+        return (now or time.time()) - float(stamp.get("finished_at") or 0) >= interval
+
+    def start_scheduler(self, backend: Any) -> None:
+        """Refresh the index in the background whenever it falls behind schedule.
+
+        Runs on a daemon thread for the life of the server. Each pass checks
+        staleness, builds if needed, and sleeps for an hour; an unreachable
+        Zotero (desktop app closed) is logged and simply retried next pass.
+        """
+        if self.settings.update_schedule not in _SCHEDULE_SECONDS:
+            return
+
+        def _loop() -> None:
+            time.sleep(5.0)  # let the MCP handshake and warm-up finish first
+            while True:
+                try:
+                    if self.is_stale():
+                        logger.info("Semantic index is behind schedule; refreshing.")
+                        stats = self.build(backend)
+                        logger.info("Index refresh done: %s", stats)
+                except Exception as exc:  # noqa: BLE001 - never take the server down
+                    logger.warning("Scheduled index refresh failed: %s", exc)
+                time.sleep(_SCHEDULE_POLL)
+
+        threading.Thread(target=_loop, name="semantic-refresh", daemon=True).start()
+
+    @property
     def collection(self) -> Any:
         if self._collection is None:
-            self._require()
-            import chromadb
+            with self._open_lock:
+                if self._collection is None:
+                    self._collection = self._open()
+        return self._collection
 
-            self.db_path.mkdir(parents=True, exist_ok=True)
-            client = chromadb.PersistentClient(path=str(self.db_path))
-            col = client.get_or_create_collection(
+    def _open(self) -> Any:
+        self._require()
+        import chromadb
+
+        self.db_path.mkdir(parents=True, exist_ok=True)
+        client = chromadb.PersistentClient(path=str(self.db_path))
+        col = client.get_or_create_collection(
+            name=_COLLECTION,
+            embedding_function=self._embedding_function(),
+            metadata={"fingerprint": self.fingerprint, "hnsw:space": "cosine"},
+        )
+        stored = (col.metadata or {}).get("fingerprint")
+        if stored and stored != self.fingerprint:
+            logger.warning(
+                "Embedding model changed (%s -> %s); resetting index.",
+                stored,
+                self.fingerprint,
+            )
+            client.delete_collection(_COLLECTION)
+            col = client.create_collection(
                 name=_COLLECTION,
                 embedding_function=self._embedding_function(),
                 metadata={"fingerprint": self.fingerprint, "hnsw:space": "cosine"},
             )
-            stored = (col.metadata or {}).get("fingerprint")
-            if stored and stored != self.fingerprint:
-                logger.warning(
-                    "Embedding model changed (%s -> %s); resetting index.",
-                    stored,
-                    self.fingerprint,
-                )
-                client.delete_collection(_COLLECTION)
-                col = client.create_collection(
-                    name=_COLLECTION,
-                    embedding_function=self._embedding_function(),
-                    metadata={"fingerprint": self.fingerprint, "hnsw:space": "cosine"},
-                )
-            self._collection = col
-        return self._collection
+        return col
 
     def warm_up(self) -> None:
         """Open the store and load the embedding model on a background thread.
@@ -337,6 +405,10 @@ class SemanticIndex:
     def build(self, backend: Any, *, progress: Any = None) -> BuildStats:
         """Bring the index in step with the library, re-embedding only changes."""
         self._require()
+        with self._build_lock:
+            return self._build(backend, progress)
+
+    def _build(self, backend: Any, progress: Any) -> BuildStats:
         col = self.collection
         stats = BuildStats()
 
@@ -386,6 +458,7 @@ class SemanticIndex:
             col.delete(where={"item_key": key})
             stats.removed += 1
 
+        self._write_stamp(stats)
         return stats
 
     def _chunks_for(

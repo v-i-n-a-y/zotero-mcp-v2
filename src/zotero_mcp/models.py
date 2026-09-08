@@ -359,6 +359,9 @@ class HealthReport(_Model):
     schema_version: int = 0
     semantic_index: str = "unavailable"
     indexed_items: int | None = None
+    #: ISO timestamp (UTC) of the last index refresh, and the refresh schedule.
+    index_refreshed: str | None = None
+    index_schedule: str | None = None
     optional_features: dict[str, bool] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
 
