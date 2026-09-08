@@ -180,6 +180,10 @@ class ItemDetail(_Model):
     fields: dict[str, Any] = Field(default_factory=dict)
     date_added: str | None = None
     date_modified: str | None = None
+    #: True when the item sits in Zotero's Trash. Read tools that list items
+    #: exclude trashed items, but a direct fetch by key still returns one, so
+    #: this flag exists to stop a caller mistaking a trashed item for a live one.
+    deleted: bool = False
     zotero_uri: str | None = None
 
 

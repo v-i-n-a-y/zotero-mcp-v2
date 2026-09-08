@@ -215,6 +215,11 @@ def _creator_summary(creators: list[Creator]) -> str | None:
     return f"{names[0]} et al."
 
 
+#: Public name for the byline rule, for callers (the indexer) that need it
+#: without importing the presentation layer.
+creator_summary = _creator_summary
+
+
 def _fallback_title(data: dict[str, Any], item_type: str) -> str:
     """A title for types that store it under another name, or have none.
 
@@ -282,6 +287,7 @@ def to_item_detail(
         "relations",
         "dateAdded",
         "dateModified",
+        "deleted",
     }
     fields = {k: v for k, v in data.items() if k not in reserved and v not in (None, "", [], {})}
 
@@ -306,6 +312,7 @@ def to_item_detail(
         fields=fields,
         date_added=data.get("dateAdded"),
         date_modified=data.get("dateModified"),
+        deleted=bool(data.get("deleted")),
         zotero_uri=zotero_uri(key, library) if key else None,
     )
 
@@ -430,6 +437,7 @@ def collection_paths(collections: list[dict[str, Any]]) -> dict[str, str]:
 __all__ = [
     "citation_key_of",
     "collection_paths",
+    "creator_summary",
     "creators_of",
     "publication_of",
     "related_keys_of",

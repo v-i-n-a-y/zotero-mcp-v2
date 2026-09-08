@@ -142,6 +142,13 @@ def render_item_detail(detail: ItemDetail) -> str:
     """
     lines = [f"# {detail.title or 'Untitled'}", ""]
 
+    if detail.deleted:
+        lines += [
+            "> ⚠ **This item is in the Trash.** It is not part of the active library "
+            "and will be lost when the Trash is emptied. Restore it from the Zotero client.",
+            "",
+        ]
+
     facts = [f"**Type:** {detail.item_type}", f"**Key:** `{detail.key}`"]
     if detail.version is not None:
         facts.append(f"**Version:** {detail.version}")
@@ -421,9 +428,11 @@ def render_stats(stats: LibraryStats) -> str:
         f"- **Items:** {stats.total_items:,}",
         f"- **Collections:** {stats.collection_count:,}",
         f"- **Tags:** {stats.tag_count:,}",
-        f"- **Attachments:** {stats.attachment_count:,}",
-        f"- **Notes:** {stats.note_count:,}",
     ]
+    if stats.attachment_count:
+        lines.append(f"- **Attachments:** {stats.attachment_count:,}")
+    if stats.note_count:
+        lines.append(f"- **Notes:** {stats.note_count:,}")
     if stats.items_with_pdf is not None:
         lines.append(f"- **With a PDF:** {stats.items_with_pdf:,}")
     if stats.items_without_collection is not None:
