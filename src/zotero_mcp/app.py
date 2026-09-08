@@ -25,6 +25,8 @@ from typing import Any
 
 from fastmcp import FastMCP
 
+from zotero_mcp._version import __version__
+
 logger = logging.getLogger(__name__)
 
 INSTRUCTIONS = """\
@@ -85,6 +87,9 @@ async def lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
 
 mcp: FastMCP = FastMCP(
     name="Zotero",
+    # Without this a client reports FastMCP's version as the server's, which
+    # makes a bug report from the field impossible to place.
+    version=__version__,
     instructions=INSTRUCTIONS,
     lifespan=lifespan,
 )

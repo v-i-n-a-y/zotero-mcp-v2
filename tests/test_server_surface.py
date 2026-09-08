@@ -199,3 +199,11 @@ def test_the_tidy_prompt_leaves_dry_run_alone():
 
 def test_the_support_prompt_asks_for_contradicting_evidence_too():
     assert "contradict" in find_support(claim="attention beats recurrence")
+
+
+def test_the_server_reports_its_own_version_not_the_frameworks():
+    """A client shows this in its logs; FastMCP's version there is useless."""
+    from zotero_mcp._version import __version__
+    from zotero_mcp.app import mcp
+
+    assert mcp.version == __version__
