@@ -135,3 +135,84 @@ def test_health_reports_a_startup_failure_instead_of_failing_itself(monkeypatch,
         assert "Start Zotero." in data["warnings"]
     finally:
         set_startup_error(None)
+
+
+# ---------------------------------------------------------------------------
+# RSS feeds, which exist only in the desktop client's own database
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def with_zotero_database(fake_backend, tmp_path):
+    """Point the active runtime at a miniature zotero.sqlite."""
+    from dataclasses import replace
+
+    from test_localdb import build_database
+    from zotero_mcp.config import ZoteroConfig
+    from zotero_mcp.runtime import Runtime, set_runtime
+
+    path = build_database(tmp_path / "zotero.sqlite")
+    config = ZoteroConfig()
+    config = replace(config, library=replace(config.library, sqlite_path=str(path)))
+    set_runtime(Runtime(config=config, backend=fake_backend))
+    return path
+
+
+def test_feeds_lists_the_subscriptions(with_zotero_database):
+    result = zotero_library(action="feeds")
+    text = result_text(result)
+    assert "Nature" in text
+    assert "https://nature.com/rss" in text
+    assert "last error: HTTP 404" in text
+    assert {feed["libraryID"] for feed in result_data(result)["feeds"]} == {7, 8}
+
+
+def test_feed_items_reads_one_feed(with_zotero_database):
+    result = zotero_library(action="feed_items", feed_id=7)
+    data = result_data(result)
+    assert data["feed_id"] == 7
+    assert [item["key"] for item in data["items"]] == ["FEEDBBBB", "FEEDAAAA"]
+    assert "(unread)" in result_text(result)
+
+
+def test_feed_items_needs_a_feed_id(with_zotero_database):
+    with pytest.raises(ToolError) as excinfo:
+        zotero_library(action="feed_items")
+    assert "needs a feed_id" in str(excinfo.value)
+
+
+def test_feed_items_rejects_something_that_is_not_an_id(with_zotero_database):
+    with pytest.raises(ToolError) as excinfo:
+        zotero_library(action="feed_items", feed_id="nature")
+    assert "not a feed id" in str(excinfo.value)
+
+
+def test_an_unknown_feed_id_lists_the_real_ones(with_zotero_database):
+    with pytest.raises(ToolError) as excinfo:
+        zotero_library(action="feed_items", feed_id=99)
+    assert "7, 8" in str(excinfo.value)
+
+
+def test_a_machine_without_zotero_installed_says_so(fake_backend, tmp_path, monkeypatch):
+    monkeypatch.setenv("ZOTERO_DATA_DIR", str(tmp_path / "no-zotero-here"))
+    with pytest.raises(ToolError) as excinfo:
+        zotero_library(action="feeds")
+    assert "Zotero desktop application" in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# Item versions, for callers keeping their own copy in step
+# ---------------------------------------------------------------------------
+
+
+def test_versions_reports_every_item(fake_backend):
+    data = result_data(zotero_library(action="versions"))
+    assert data["versions"] == {key: 1 for key in fake_backend.items}
+    assert data["since"] is None
+
+
+def test_versions_since_a_point_reports_only_what_changed(fake_backend):
+    fake_backend.items["KAHN3456"]["version"] = 9
+    data = result_data(zotero_library(action="versions", since_version=1))
+    assert data["versions"] == {"KAHN3456": 9}
+    assert "since 1" in result_text(zotero_library(action="versions", since_version=1))

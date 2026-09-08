@@ -42,7 +42,18 @@ logger = logging.getLogger(__name__)
 @c.tool
 def zotero_library(
     action: Annotated[
-        Literal["recent", "stats", "list", "switch", "by_type", "uncollected", "saved_searches"],
+        Literal[
+            "recent",
+            "stats",
+            "list",
+            "switch",
+            "by_type",
+            "uncollected",
+            "saved_searches",
+            "feeds",
+            "feed_items",
+            "versions",
+        ],
         Field(description="What to do. 'recent' is the usual way to see what is new."),
     ] = "recent",
     item_type: Annotated[str | None, Field(description="Item type, for action='by_type'.")] = None,
@@ -51,6 +62,14 @@ def zotero_library(
     ] = None,
     library_type: Annotated[
         Literal["user", "group"] | None, Field(description="Whether that library is a group.")
+    ] = None,
+    feed_id: Annotated[
+        int | str | None,
+        Field(description="Feed library id, for action='feed_items'. From action='feeds'."),
+    ] = None,
+    since_version: Annotated[
+        int | None,
+        Field(description="For action='versions': only items changed after this version."),
     ] = None,
     limit: Annotated[int | str | None, Field(description="Page size.")] = None,
     cursor: Annotated[str | None, Field(description="Continue a previous listing.")] = None,
@@ -82,6 +101,23 @@ def zotero_library(
 
     if action == "stats":
         return _stats()
+
+    if action == "feeds":
+        return _feeds()
+
+    if action == "feed_items":
+        return _feed_items(feed_id, c.page_size(limit))
+
+    if action == "versions":
+        versions = backend.get_item_versions(since=since_version)
+        heading = (
+            f"# Item versions since {since_version}"
+            if since_version is not None
+            else "# Item versions"
+        )
+        lines = [heading, "", f"{len(versions)} item(s).", ""]
+        lines += [f"- `{key}` v{version}" for key, version in sorted(versions.items())[:200]]
+        return c.respond("\n".join(lines), {"versions": versions, "since": since_version})
 
     if action == "saved_searches":
         searches = backend.get_saved_searches()
@@ -123,6 +159,77 @@ def zotero_library(
     raw = backend.get_items(ItemQuery(**{**spec.as_fingerprint(), "offset": offset, "limit": size}))
     page = c.build_result_page(raw, fingerprint=fingerprint, size=size)
     return c.respond(render_result_page(page, heading=heading), page)
+
+
+def _feeds() -> Any:
+    """RSS subscriptions, which live only in the desktop client's database."""
+    from zotero_mcp.backends import localdb
+
+    feeds = localdb.get_feeds(c.runtime().config)
+    if not feeds:
+        return c.respond(
+            "# RSS feeds\n\nNo feeds are subscribed in this Zotero installation.",
+            {"feeds": []},
+        )
+
+    lines = ["# RSS feeds", ""]
+    for feed in feeds:
+        error = f" (last error: {feed['lastCheckError']})" if feed.get("lastCheckError") else ""
+        lines += [
+            f"### {feed.get('name') or 'Untitled feed'}",
+            f"- **Feed id:** `{feed['libraryID']}`",
+            f"- **URL:** {feed.get('url') or '(none)'}",
+            f"- **Items:** {feed.get('itemCount', 0)}",
+            f"- **Last checked:** {feed.get('lastCheck') or 'never'}{error}",
+            "",
+        ]
+    lines.append("*Read items with zotero_library(action='feed_items', feed_id=...).*")
+    return c.respond("\n".join(lines), {"feeds": feeds})
+
+
+def _feed_items(feed_id: int | str | None, size: int) -> Any:
+    """One feed's items, newest first."""
+    from zotero_mcp.backends import localdb
+
+    if feed_id is None:
+        raise InvalidInput(
+            "action='feed_items' needs a feed_id.",
+            hint="Use zotero_library(action='feeds') to list them.",
+        )
+    try:
+        numeric = int(feed_id)
+    except (TypeError, ValueError) as exc:
+        raise InvalidInput(f"{feed_id!r} is not a feed id.", hint="Feed ids are numbers.") from exc
+
+    config = c.runtime().config
+    known = {feed["libraryID"] for feed in localdb.get_feeds(config)}
+    if numeric not in known:
+        raise NotFound(
+            f"No feed with id {numeric}.",
+            hint=(
+                f"Known feed ids: {', '.join(str(i) for i in sorted(known)) or 'none'}."
+                if known
+                else "This Zotero has no feed subscriptions."
+            ),
+        )
+
+    items = localdb.get_feed_items(config, numeric, limit=size)
+    lines = ["# Feed items", ""]
+    for item in items:
+        unread = "" if item.get("readTime") else " **(unread)**"
+        lines += [
+            f"### {item.get('title') or 'Untitled'}{unread}",
+            f"- **Authors:** {item.get('creators') or 'unknown'}",
+            f"- **Added:** {item.get('dateAdded') or 'unknown'}",
+        ]
+        if url := item.get("url"):
+            lines.append(f"- **URL:** {url}")
+        if abstract := item.get("abstract"):
+            lines.append(f"\n{abstract[:400]}")
+        lines.append("")
+    if not items:
+        lines.append("This feed has no items.")
+    return c.respond("\n".join(lines), {"feed_id": numeric, "items": items})
 
 
 def _uncollected(size: int, cursor: str | None) -> Any:
