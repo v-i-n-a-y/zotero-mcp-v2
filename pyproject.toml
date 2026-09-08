@@ -66,8 +66,10 @@ line-length = 100
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
-ignore = ["E501", "B008"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "BLE"]
+# RUF001: en dashes are deliberate in user-facing markdown (page and result ranges).
+# B008: FastMCP tool signatures use Field(...) defaults by design.
+ignore = ["E501", "B008", "RUF001"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

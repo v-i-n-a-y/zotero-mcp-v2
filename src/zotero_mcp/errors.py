@@ -158,7 +158,7 @@ def tool_errors(func: F) -> F:
             raise ToolError(
                 Unsupported(str(exc) or "Operation not supported by this backend").render()
             ) from exc
-        except Exception as exc:  # noqa: BLE001 — deliberate catch-all at the seam
+        except Exception as exc:  # deliberate catch-all: this is the outermost seam
             logger.exception("Unhandled error in tool %s", getattr(func, "__name__", "?"))
             raise ToolError(
                 InternalError(
