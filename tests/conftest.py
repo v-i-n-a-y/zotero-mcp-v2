@@ -362,6 +362,10 @@ class FakeBackend:
         from zotero_mcp.backends.base import RawPage
 
         rows = [json_copy(i) for i in self.items.values()]
+        #: Zotero's /items returns child notes and attachments alongside their
+        #: parents; only /items/top leaves them out, so honour the same rule.
+        if not spec.top_level_only:
+            rows += [json_copy(c) for c in self.child_index.values()]
 
         if spec.collection_key:
             rows = [r for r in rows if spec.collection_key in (r["data"].get("collections") or [])]
@@ -388,6 +392,9 @@ class FakeBackend:
                     (c.get("lastName") or c.get("name") or "") for c in data.get("creators") or []
                 )
                 base = f"{data.get('title', '')} {data.get('caseName', '')} {creators} {data.get('date', '')}"
+                #: A note has no title of its own: Zotero shows and matches its
+                #: first line, and an annotation stands in for its highlight.
+                base += f" {data.get('note', '')} {data.get('annotationText', '')}"
                 if spec.qmode == "everything":
                     base += f" {data.get('abstractNote', '')} {data.get('extra', '')} {data.get('DOI', '')}"
                 return base.lower()
@@ -459,7 +466,10 @@ class FakeBackend:
         return {"itemType": item_type, "title": "", "creators": []}
 
     def get_item_versions(self, *, since=None):
-        return {k: v["version"] for k, v in self.items.items()}
+        versions = {k: v["version"] for k, v in self.items.items()}
+        if since is not None:
+            versions = {k: v for k, v in versions.items() if v > since}
+        return versions
 
     # -- writes ------------------------------------------------------------
     def _guard(self, action):

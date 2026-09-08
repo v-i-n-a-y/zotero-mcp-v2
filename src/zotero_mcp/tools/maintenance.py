@@ -73,7 +73,12 @@ def zotero_export(
 
     if collection_key:
         raw = c.backend().get_items(
-            ItemQuery(collection_key=collection_key, limit=_EXPORT_LIMIT, item_type="-attachment")
+            ItemQuery(
+                collection_key=collection_key,
+                item_type="-attachment",
+                top_level_only=True,
+                limit=_EXPORT_LIMIT,
+            )
         )
         keys.extend(item.get("key") for item in raw.items if item.get("key"))
 
@@ -168,6 +173,7 @@ def zotero_duplicates(
             ItemQuery(
                 collection_key=collection_key,
                 item_type="-attachment",
+                top_level_only=True,
                 offset=offset,
                 limit=min(100, scan - len(collected)),
             )

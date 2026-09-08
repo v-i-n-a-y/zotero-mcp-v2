@@ -169,7 +169,11 @@ def scite_check_retractions(
     while len(dois) < ceiling:
         raw = c.backend().get_items(
             ItemQuery(
-                collection_key=collection_key, item_type="-attachment", offset=offset, limit=100
+                collection_key=collection_key,
+                item_type="-attachment",
+                top_level_only=True,
+                offset=offset,
+                limit=100,
             )
         )
         if not raw.items:
