@@ -1,3 +1,5 @@
+# Copyright 2026 Vinay
+
 """Configuration precedence, migration and validation."""
 
 import json

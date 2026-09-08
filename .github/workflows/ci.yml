@@ -1,3 +1,5 @@
+# Copyright 2026 Vinay
+
 name: CI
 
 on:
@@ -22,7 +24,9 @@ jobs:
       # pre-commit config can never drift apart.
       - uses: pre-commit/action@v3.0.1
         env:
-          SKIP: pytest
+          # The dedicated test job below covers these; running them here too
+          # would just double the wall-clock for no extra signal.
+          SKIP: pytest,coverage,no-commit-to-branch
 
   test:
     runs-on: ${{ matrix.os }}
@@ -47,7 +51,7 @@ jobs:
       # declared dependencies and the tested ones cannot diverge.
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e ".[dev]"
-      - run: python -m pytest -q
+      - run: python -m pytest -q --cov=zotero_mcp --cov-report=term-missing
 
   types:
     runs-on: ubuntu-latest

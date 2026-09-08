@@ -1,3 +1,5 @@
+# Copyright 2026 Vinay
+
 """Zotero base-field resolution against the vendored schema."""
 
 import json
@@ -158,7 +160,7 @@ def test_trim_reduces_a_full_schema_document():
 
 
 def test_refresh_backs_off_after_a_failure(tmp_path, monkeypatch):
-    """An offline machine must not retry — and warn — on every single startup."""
+    """An offline machine must not retry, and warn, on every single startup."""
     import time
 
     cache = tmp_path / "schema.json"

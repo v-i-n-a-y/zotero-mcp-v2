@@ -1,3 +1,5 @@
+# Copyright 2026 Vinay
+
 """The single seam where a tool's output becomes a result."""
 
 from zotero_mcp.models import ItemSummary, ResultPage

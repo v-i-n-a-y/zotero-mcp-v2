@@ -1,12 +1,15 @@
+# Copyright 2026 Vinay
+
 """Recognising and normalising scholarly identifiers.
 
 Stdlib only, and imports nothing else from this package, so it stays cheap to
 import from anywhere (the CLI, a worker process, a downstream consumer) and
 can be unit-tested without a Zotero client, network, or optional extras.
 
-The purpose is to collapse the many shapes a user or an LLM will hand us —
+The purpose is to collapse the many shapes a user or an LLM will hand us
 ``https://doi.org/10.1/x``, ``doi:10.1/x``, ``arXiv:2301.00001v2``,
-``PMC1234``, an ISBN with hyphens — onto one canonical form per identifier
+(``https://doi.org/10.1/x``, ``doi:10.1/x``, ``arXiv:2301.00001v2``,
+``PMC1234``, an ISBN with hyphens) onto one canonical form per identifier
 type, and to *classify* a bare string so a single ``add`` tool can accept any
 of them without the caller having to say which it is.
 """
@@ -74,7 +77,7 @@ def normalize_doi(value: str | None) -> str | None:
 
     Accepts a bare DOI, a ``doi:`` prefix, or a doi.org/dx.doi.org URL, and
     tolerates a DOI embedded in surrounding text. Trailing sentence
-    punctuation is stripped — a DOI copied from a reference list almost always
+    punctuation is stripped, since a DOI copied from a reference list almost always
     arrives with a full stop attached.
     """
     if not value:

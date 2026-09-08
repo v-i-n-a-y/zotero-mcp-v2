@@ -1,6 +1,8 @@
+# Copyright 2026 Vinay
+
 """Turn raw Zotero API payloads into this package's models.
 
-One module, one direction, no side effects — nothing here opens a connection or
+One module, one direction, no side effects. Nothing here opens a connection or
 reads a file, so every mapping rule is unit-testable against a literal dict.
 
 The rules encoded here are the ones the predecessors got subtly wrong and had
@@ -39,7 +41,7 @@ _CITATION_KEY_RE = re.compile(
 
 # A year anywhere in the date string. Zotero dates are free text and arrive as
 # "2017", "2017-06", "June 2017", "2017-06-12", "n.d." and worse, so taking
-# date[:4] — which both predecessors do — yields "June" or "n.d." surprisingly
+# date[:4], which both predecessors do, yields "June" or "n.d." surprisingly
 # often.
 _YEAR_RE = re.compile(r"\b(1[0-9]{3}|20[0-9]{2}|21[0-9]{2})\b")
 
@@ -54,7 +56,7 @@ def strip_html(value: str | None) -> str:
     """Flatten Zotero note HTML to readable plain text.
 
     Block ends become newlines before tags are removed, so paragraphs do not
-    run together into one wall of text — which is what a naive tag-strip
+    run together into one wall of text, which is what a naive tag-strip
     produces and why notes were previously unreadable in tool output.
     """
     if not value:

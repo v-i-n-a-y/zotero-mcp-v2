@@ -1,3 +1,5 @@
+# Copyright 2026 Vinay
+
 """Zotero MCP server."""
 
 from zotero_mcp._version import __version__

@@ -1,3 +1,5 @@
+# Copyright 2026 Vinay
+
 """Cursors, page assembly and text clamping."""
 
 import pytest

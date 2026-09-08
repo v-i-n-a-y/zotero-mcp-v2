@@ -1,3 +1,5 @@
+# Copyright 2026 Vinay
+
 """Typed failures, and the single seam that turns them into MCP tool errors.
 
 The predecessor to this package returned every failure as a *successful* tool
@@ -8,7 +10,7 @@ happened. Retry logic, fallbacks and "did the write land?" checks all become
 guesswork.
 
 Here every failure is an exception carrying a machine-readable ``code``, a
-human sentence, and — where one exists — a ``hint`` naming the concrete next
+human sentence, and, where one exists, a ``hint`` naming the concrete next
 action. :func:`tool_errors` converts them at the tool boundary into
 ``fastmcp.exceptions.ToolError``, which FastMCP marshals with ``isError``
 set, so the model is told plainly that the call failed and why.

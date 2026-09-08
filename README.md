@@ -3,7 +3,7 @@
 A ground-up rewrite of the Zotero [Model Context Protocol](https://modelcontextprotocol.io)
 server.
 
-Same capabilities as the server it replaces — and then some — but built around
+Same capabilities as the server it replaces, and then some, but built around
 three rules the original could not retrofit:
 
 1. **No tool may return an unbounded response.** Every read is paginated,

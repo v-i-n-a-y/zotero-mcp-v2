@@ -1,3 +1,5 @@
+# Copyright 2026 Vinay
+
 """One typed configuration object, loaded once.
 
 The predecessor read ``~/.config/zotero-mcp/config.json`` from eight different
@@ -94,7 +96,7 @@ class LimitSettings:
     """
 
     #: Hard ceiling on the characters any one tool may return. Roughly
-    #: 6k tokens at ~4 chars/token — enough for a rich answer, small enough
+    #: 6k tokens at ~4 chars/token: enough for a rich answer, small enough
     #: that a bad call is survivable.
     max_response_chars: int = 24_000
     #: Ceiling for tools whose whole purpose is bulk text (page reads).

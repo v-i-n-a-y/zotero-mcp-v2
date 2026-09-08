@@ -1,4 +1,6 @@
-"""Zotero payloads to models — the rules that were previously got wrong."""
+# Copyright 2026 Vinay
+
+"""Zotero payloads to models: the rules that were previously got wrong."""
 
 import pytest
 
@@ -46,7 +48,7 @@ ARTICLE = {
     [
         ("2017", "2017"),
         ("2017-06-12", "2017"),
-        # date[:4] — what both predecessors do — yields "June" and "n.d." here.
+        # date[:4], what both predecessors do, yields "June" and "n.d." here.
         ("June 2017", "2017"),
         ("12/06/2017", "2017"),
         ("n.d.", None),

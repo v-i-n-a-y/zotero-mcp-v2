@@ -1,3 +1,5 @@
+# Copyright 2026 Vinay
+
 """The markdown half of every tool result.
 
 Rendering lives apart from the models on purpose. The models are the contract
@@ -9,7 +11,7 @@ Two conventions run through everything here:
 
 * **Every rendered object shows its key.** The key is what the next call needs.
   Burying it, or omitting it because it is "internal", forces the model to
-  guess — and it will.
+  guess, and it will.
 * **Nothing here decides how much to emit.** Budgets belong to the caller,
   which knows the tool's limit; these functions render what they are given.
 """
@@ -121,7 +123,7 @@ def render_result_page(page: ResultPage, *, heading: str, numbered: bool = True)
         lines.append("")
 
     if page.next_cursor:
-        lines.append(f'*More results available — pass `cursor="{page.next_cursor}"` to continue.*')
+        lines.append(f'*More results available. Pass `cursor="{page.next_cursor}"` to continue.*')
     if page.diagnostics:
         diag = page.diagnostics
         if diag.timed_out:
@@ -255,7 +257,7 @@ def render_content_chunk(chunk: ContentChunk) -> str:
     lines.append(chunk.text)
 
     if chunk.has_more and chunk.next_pages:
-        lines += ["", f'*More to read — call again with `pages="{chunk.next_pages}"`.*']
+        lines += ["", f'*More to read. Call again with `pages="{chunk.next_pages}"`.*']
     elif chunk.truncated:
         lines += ["", "*Output was truncated to fit the response budget.*"]
     return "\n".join(lines)
@@ -325,10 +327,10 @@ def render_collections(page: CollectionPage, *, heading: str) -> str:
             counts.append(f"{collection.item_count} items")
         if collection.subcollection_count:
             counts.append(f"{collection.subcollection_count} subcollections")
-        suffix = f" — {', '.join(counts)}" if counts else ""
+        suffix = f" – {', '.join(counts)}" if counts else ""
         lines.append(f"{'  ' * depth}- **{collection.name}** (`{collection.key}`){suffix}")
     if page.next_cursor:
-        lines += ["", f'*More — pass `cursor="{page.next_cursor}"` to continue.*']
+        lines += ["", f'*More. Pass `cursor="{page.next_cursor}"` to continue.*']
     return "\n".join(lines)
 
 
@@ -348,13 +350,13 @@ def render_outline(entries: list[OutlineEntry], *, heading: str) -> str:
         return f"# {heading}\n\nThis document has no embedded outline."
     lines = [f"# {heading}", ""]
     for entry in entries:
-        page = f" — p. {entry.page}" if entry.page else ""
+        page = f" – p. {entry.page}" if entry.page else ""
         lines.append(f"{'  ' * max(0, entry.level - 1)}- {entry.title}{page}")
     return "\n".join(lines)
 
 
 def render_write_result(result: WriteResult) -> str:
-    """A write outcome — or, unmistakably, a preview of one.
+    """A write outcome, or, unmistakably, a preview of one.
 
     The dry-run banner leads, because a preview mistaken for a completed write
     is the failure mode that costs a user real data.
@@ -376,8 +378,8 @@ def render_write_result(result: WriteResult) -> str:
     if result.changes:
         lines += ["| Field | Before | After |", "| --- | --- | --- |"]
         for change in result.changes:
-            before = "—" if change.before in (None, "", []) else str(change.before)
-            after = "—" if change.after in (None, "", []) else str(change.after)
+            before = "–" if change.before in (None, "", []) else str(change.before)
+            after = "–" if change.after in (None, "", []) else str(change.after)
             lines.append(f"| {change.field} | {before[:120]} | {after[:120]} |")
         lines.append("")
 
@@ -390,7 +392,7 @@ def render_write_result(result: WriteResult) -> str:
         lines.append(f"**Already up to date:** {len(result.unchanged)}")
     if result.failed:
         lines += ["", "**Failed:**"]
-        lines += [f"- `{key}` — {reason}" for key, reason in list(result.failed.items())[:25]]
+        lines += [f"- `{key}`: {reason}" for key, reason in list(result.failed.items())[:25]]
     if result.created_key:
         lines += ["", f"**New key:** `{result.created_key}`"]
     if result.version is not None:
@@ -403,11 +405,11 @@ def render_duplicates(groups: list[DuplicateGroup], *, heading: str) -> str:
         return f"# {heading}\n\nNo duplicates found."
     lines = [f"# {heading}", "", f"*{len(groups)} group{'s' if len(groups) != 1 else ''}*", ""]
     for index, group in enumerate(groups, start=1):
-        lines.append(f"### Group {index} — {group.reason} ({group.confidence:.0%} confidence)")
+        lines.append(f"### Group {index}: {group.reason} ({group.confidence:.0%} confidence)")
         for item in group.items:
             master = " ← suggested master" if item.key == group.master_key else ""
             byline = f"{item.creator_summary}, " if item.creator_summary else ""
-            lines.append(f"- `{item.key}` {byline}{item.year or 'n.d.'} — {item.title}{master}")
+            lines.append(f"- `{item.key}` {byline}{item.year or 'n.d.'}: {item.title}{master}")
         lines.append("")
     return "\n".join(lines).rstrip()
 

@@ -1,11 +1,13 @@
+# Copyright 2026 Vinay
+
 """The structured half of every tool result.
 
 A tool here returns two things: markdown for the human in the loop, and one of
 these models as structured content for the model driving the conversation.
 
 That second half is the point. The predecessor returned markdown only, so a
-caller that wanted an item key — the join key for literally every follow-up
-call — had to find it inside prose and hope the formatting had not changed.
+caller that wanted an item key, the join key for literally every follow-up
+call, had to find it inside prose and hope the formatting had not changed.
 Models re-derive those keys wrongly often enough that "the assistant made up a
 Zotero key" is a recognisable failure mode. Handing back typed data removes the
 guesswork, and gives MCP clients a real output schema to validate against.
@@ -110,7 +112,7 @@ class AttachmentRef(_Model):
     filename: str | None = None
     link_mode: str | None = None
     #: True when the file is present locally or downloadable. False for a
-    #: linked file whose path no longer resolves — a common and otherwise
+    #: linked file whose path no longer resolves: a common and otherwise
     #: baffling reason that reading a paper fails.
     available: bool | None = None
     page_count: int | None = None
@@ -200,7 +202,7 @@ class Annotation(_Model):
     tags: list[str] = Field(default_factory=list)
     date_modified: str | None = None
     #: Set when the annotation was extracted from the file rather than read
-    #: from Zotero's own database — the two can disagree.
+    #: from Zotero's own database. The two can disagree.
     source: Literal["zotero", "extracted"] = "zotero"
 
 
@@ -250,7 +252,7 @@ class SearchDiagnostics(_Model):
     """Why a search returned what it did.
 
     Search over a personal library is substring matching with a fallback
-    cascade, and it fails in ways the caller can act on — too many words, a
+    cascade, and it fails in ways the caller can act on: too many words, a
     diacritic mismatch, an empty collection. Reporting the strategy that
     actually produced the results turns a silent empty list into a fixable one.
     """
@@ -297,7 +299,7 @@ class WriteResult(_Model):
     """The outcome of a write, or the preview of one that was not performed.
 
     ``dry_run`` is part of the result rather than only the request so that a
-    preview can never be mistaken for a completed write — the most dangerous
+    preview can never be mistaken for a completed write, the most dangerous
     ambiguity in a library-mutating tool.
     """
 

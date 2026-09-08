@@ -1,4 +1,6 @@
-"""Cursors and clamping — the machinery that keeps a response bounded.
+# Copyright 2026 Vinay
+
+"""Cursors and clamping: the machinery that keeps a response bounded.
 
 Two separate problems, both of which the predecessor left unsolved.
 
@@ -9,7 +11,7 @@ one page, and a cursor carries the position for the next call.
 
 **Too much text.** A single item's fulltext could be a hundred thousand
 characters, and the only mitigation was a warning prepended to text that had
-already been serialised — the tokens were spent before the caller read the
+already been serialised. The tokens were spent before the caller read the
 warning. Here :func:`clamp` cuts to a real budget, on a sensible boundary, and
 says what it did.
 
@@ -122,7 +124,7 @@ class Page(Generic[T]):
     ) -> Page[T]:
         """Assemble a page, issuing a cursor only when more results exist.
 
-        When *has_more* is not supplied it is inferred from a full page — the
+        When *has_more* is not supplied it is inferred from a full page: the
         standard trick, and mildly over-eager: a result set that is an exact
         multiple of the page size yields one final empty page. That is
         preferable to the alternative, which is silently dropping the tail.
@@ -229,7 +231,7 @@ def estimate_tokens(text: str) -> int:
     """Rough token count for *text*.
 
     Four characters per token is the usual English approximation. It is only
-    used for advisory messages, never for a decision that must be exact —
+    used for advisory messages, never for a decision that must be exact.
     every real limit in this package is expressed in characters, which are
     cheap and unambiguous to count.
     """

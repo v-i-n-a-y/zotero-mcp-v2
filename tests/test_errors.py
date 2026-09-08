@@ -1,3 +1,5 @@
+# Copyright 2026 Vinay
+
 """Error translation at the tool boundary."""
 
 import pytest

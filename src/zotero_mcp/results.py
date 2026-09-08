@@ -1,7 +1,9 @@
+# Copyright 2026 Vinay
+
 """Assembling a tool result: markdown plus structured content, within budget.
 
 Every tool ends here. Routing all of them through one function is what makes
-"no unbounded response" enforceable rather than aspirational — there is exactly
+"no unbounded response" enforceable rather than aspirational: there is exactly
 one place where text becomes a result, and it clamps.
 
 The structured half is emitted only when the running configuration allows it
@@ -42,7 +44,7 @@ def reply(
 
     Returns:
         A ``ToolResult`` when structured content is included, otherwise a plain
-        string — which FastMCP wraps as a single text block, exactly as before.
+        string, which FastMCP wraps as a single text block, exactly as before.
     """
     clamped = clamp(markdown, limit)
     text = clamped.text + clamped.note

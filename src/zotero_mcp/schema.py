@@ -1,3 +1,5 @@
+# Copyright 2026 Vinay
+
 """Zotero's own item-type schema: valid fields, and base-field resolution.
 
 Zotero stores several conceptually identical fields under type-specific keys.
@@ -14,7 +16,7 @@ mapping is *data*, published by Zotero at ``/schema`` and used by the desktop
 client itself, so this module carries it as data:
 
 * a **vendored** copy (``data/zotero_schema.json``) ships with the package and
-  is the floor — the server is always correct offline, which matters because
+  is the floor. The server is always correct offline, which matters because
   local mode exists precisely for people who are not online;
 * a **runtime refresh** (:func:`refresh`) does a TTL-gated conditional GET and
   caches the result under the user's cache directory, so item types added
@@ -45,8 +47,8 @@ VENDORED_PATH = Path(__file__).parent / "data" / "zotero_schema.json"
 REFRESH_TTL_SECONDS = 7 * 24 * 3600
 
 #: After a failed refresh, wait a day before trying again. Without this, a
-#: machine with no route to api.zotero.org — the offline local-only case this
-#: server explicitly supports — retries on every startup and warns every time.
+#: machine with no route to api.zotero.org, the offline local-only case this
+#: server explicitly supports, retries on every startup and warns every time.
 FAILED_REFRESH_BACKOFF_SECONDS = 24 * 3600
 
 #: Fields every item type carries regardless of what the schema says.
@@ -149,7 +151,7 @@ def valid_fields(item_type: str) -> frozenset[str]:
     """The field names *item_type* actually accepts.
 
     Empty for an unknown type, which callers must treat as "cannot validate"
-    rather than "nothing is valid" — see :func:`unknown_fields`.
+    rather than "nothing is valid". See :func:`unknown_fields`.
     """
     return frozenset(_load_table().get("itemTypes", {}).get(item_type, {}))
 
@@ -182,7 +184,7 @@ def resolve_field(item_type: str, field: str) -> str | None:
 
     ``resolve_field("case", "title")`` is ``"caseName"``;
     ``resolve_field("case", "caseName")`` is ``"caseName"``;
-    ``resolve_field("case", "publisher")`` is ``None`` — cases have no publisher.
+    ``resolve_field("case", "publisher")`` is ``None``, since cases have no publisher.
 
     ``None`` for an unknown item type as well, so callers get one
     "cannot place this field" answer rather than two.
@@ -200,7 +202,7 @@ def resolve_fields(item_type: str, values: dict[str, Any]) -> tuple[dict[str, An
 
     Returns ``(resolved, unplaceable)``. Keys in ``UNIVERSAL_FIELDS`` pass
     through untouched. When the item type is unknown to the schema, everything
-    passes through unchanged and ``unplaceable`` is empty — an out-of-date
+    passes through unchanged and ``unplaceable`` is empty: an out-of-date
     schema must not block a write that Zotero itself would accept.
     """
     if not valid_fields(item_type):
@@ -295,7 +297,7 @@ def refresh(*, force: bool = False, timeout: float = 10.0) -> bool:
             return False
         response.raise_for_status()
         payload = response.json()
-    except Exception as exc:  # noqa: BLE001 — refresh is best-effort by design
+    except Exception as exc:  # noqa: BLE001 (refresh is best-effort by design)
         logger.debug("Zotero schema refresh failed: %s", exc)
         meta["_failed_at"] = now
         _write_cache(path, meta)
