@@ -13,6 +13,7 @@ log.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import sys
@@ -90,6 +91,13 @@ def main(argv: list[str] | None = None) -> int:
             return _tools()
     except KeyboardInterrupt:
         return 130
+    except BrokenPipeError:
+        # `zotero-mcp tools | head` closes the pipe on us. That is the user
+        # getting what they asked for, not an error to report. Point stdout at
+        # devnull so the interpreter's shutdown flush does not raise it again.
+        with contextlib.suppress(OSError):
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        return 0
     except Exception as exc:  # noqa: BLE001 (the CLI's job is to report, not to trace)
         message = getattr(exc, "message", None) or str(exc)
         print(f"error: {message}", file=sys.stderr)

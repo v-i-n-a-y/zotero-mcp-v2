@@ -323,3 +323,10 @@ def test_the_compat_flag_reaches_the_toolset_layer(monkeypatch, clean_env):
     )
     cli._prepare(None, True)
     assert seen["compat"] is True
+
+
+def test_a_closed_pipe_is_not_an_error(monkeypatch, capsys):
+    """`zotero-mcp tools | head` is the user getting what they asked for."""
+    monkeypatch.setattr("zotero_mcp.cli._tools", lambda: (_ for _ in ()).throw(BrokenPipeError()))
+    assert cli.main(["tools"]) == 0
+    assert "error" not in capsys.readouterr().err
