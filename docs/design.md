@@ -23,7 +23,7 @@ at the boundary by `@tool_errors` into `ToolError`, so MCP's `isError` flag
 is set and the model is told plainly that the call did not succeed. Errors
 carry a stable `code` and, where one exists, a `hint` naming the next action.
 
-**3. Small surface by default.** ~15 consolidated tools ship enabled. Optional
+**3. Small surface by default.** 18 consolidated tools ship enabled. Optional
 capability groups are opt-in via `ZOTERO_MCP_TOOLSETS`. The full pre-1.0 name
 set is available behind `ZOTERO_MCP_COMPAT=1` for installations that reference
 the old names.
@@ -49,7 +49,7 @@ thirty places.
 | `models.py` | Pydantic result models: the structured half of every tool result |
 | `paging.py` | Opaque cursors, response clamping |
 | `render.py` | Markdown rendering: the human half of every tool result |
-| `backends/` | `LibraryBackend` protocol + web / local-HTTP / SQLite / hybrid |
+| `backends/` | `LibraryBackend` protocol + web / local-HTTP / hybrid, and a read-only `zotero.sqlite` reader |
 | `content/` | PDF, EPUB and HTML extraction; ranged reads; fulltext cache |
 | `external/` | Crossref, Unpaywall, arXiv, Semantic Scholar, PMC, Scite, Better BibTeX |
 | `index/` | Optional semantic index (built by CLI, read-only in the server) |
@@ -60,17 +60,32 @@ thirty places.
 
 `LibraryBackend` is the only thing that talks to Zotero.
 
-- **`WebBackend`**: the Zotero Web API via pyzotero. Full read/write.
+- **`WebBackend`**: the Zotero Web API via pyzotero. Full read and write.
 - **`LocalHttpBackend`**: the desktop client's read-only API on `:23119`.
-- **`SqliteBackend`**: direct `zotero.sqlite` reads (`immutable=1`, so a
-  running Zotero's write lock does not block us). Fastest reads, no network,
-  read-only by construction.
-- **`HybridBackend`**: reads from the fastest available local source, writes
-  through `WebBackend`. This is what `ZOTERO_LOCAL=true` plus an API key
-  resolves to, because it is what that combination has always meant in
-  practice.
+- **`HybridBackend`**: reads through `LocalHttpBackend`, writes through
+  `WebBackend`, and falls back to the web for any read the local API cannot
+  serve. This is what a running Zotero plus an API key resolves to, because it
+  is what that combination has always meant in practice.
 
-Selection happens once, in `backends/factory.py`, from `LibraryMode`.
+Selection happens once, in `backends/factory.py`, from `LibraryMode`. `AUTO`
+probes: hybrid if both halves are available, then web, then local. The probe is
+non-fatal, because a server that refuses to start while Zotero happens to be
+closed is worse than one that starts, says so through `zotero_health`, and
+works the moment Zotero opens.
+
+There is deliberately no fourth backend reading `zotero.sqlite`. The database
+is an internal schema with no compatibility promise, and a backend built on it
+has to reimplement every field, type and relation mapping the API already
+does. What it uniquely offers is the handful of things that exist nowhere in
+either API, RSS feeds most obviously, so `backends/localdb.py` is a narrow
+read-only reader for exactly those, not a backend:
+
+- opened read-only through a URI, so nothing this process does can corrupt a
+  library;
+- read from a snapshot copy when Zotero holds the write lock, rather than
+  blocking a tool call on another application;
+- field ids resolved by name. The predecessor hardcoded `fieldID = 1` for the
+  title, which is true of most installs and quietly wrong on the rest.
 
 ## Response shape
 
@@ -87,14 +102,27 @@ mishandle it.
 
 ## Build order
 
-1. ~~Foundation: errors, config, identifiers~~ ✅
-2. Zotero schema, result models, paging, markdown rendering
-3. Backends: protocol, web, local HTTP, SQLite, hybrid, factory
-4. Content: PDF/EPUB extraction, ranged page reads, fulltext cache
-5. Tool surface: search, items, content, annotations, notes, write, organize,
-   library, admin
-6. External services: Crossref, Unpaywall, arXiv, S2, PMC, Scite, Better BibTeX
-7. Semantic index + discovery tools
-8. Resources, prompts, toolsets
-9. Compatibility layer: all pre-1.0 tool names
-10. CLI, setup helper, docs, CI
+1. ~~Foundation: errors, config, identifiers~~
+2. ~~Zotero schema, result models, paging, markdown rendering~~
+3. ~~Backends: protocol, web, local HTTP, hybrid, factory~~
+4. ~~Content: PDF/EPUB extraction, ranged page reads, fulltext cache~~
+5. ~~Tool surface: search, items, content, annotations, notes, write,
+   organize, library, admin~~
+6. ~~External services: Crossref, Unpaywall, arXiv, S2, PMC, Scite,
+   Better BibTeX~~
+7. ~~Semantic index and discovery tools~~
+8. ~~Resources, prompts, toolsets~~
+9. ~~Compatibility layer: all pre-1.0 tool names~~
+10. ~~CLI, setup helper, docs, CI~~
+
+## Testing
+
+The suite runs the real tools against an in-memory library that implements
+`LibraryBackend` and behaves like the Zotero API, awkward parts included: its
+`/items` equivalent returns child notes and attachments alongside their
+parents, notes match on their body text, and item keys obey Zotero's base32
+alphabet. That fidelity is the point. Every product bug the suite has found so
+far, a health tool that could not report a startup failure, a case indexed
+without its title, fetched metadata losing its authors, disabled external
+lookups reported as "nothing found", was found because the fake refused to be
+more convenient than the real thing.

@@ -36,7 +36,7 @@ jobs:
         os: [ubuntu-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13"]
         include:
-          # Path handling and the SQLite backend differ enough on these to be
+          # Path handling and the local database reader differ enough on these to be
           # worth one job each rather than a full matrix.
           - os: macos-latest
             python-version: "3.12"
