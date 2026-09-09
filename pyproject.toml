@@ -5,17 +5,33 @@ build-backend = "hatchling.build"
 [project]
 name = "zotero-mcp-next"
 dynamic = ["version"]
-authors = [{ name = "Vinay" }]
-description = "A Model Context Protocol server for Zotero — typed backends, bounded responses, consolidated tools."
-keywords = ["zotero", "mcp", "model-context-protocol", "research", "citations", "bibliography"]
+authors = [{ name = "Vinay Williams" }]
+description = "A Model Context Protocol server for Zotero: typed tools, bounded responses, write tools with previews, and local semantic search over PDFs."
+keywords = [
+    "zotero",
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "research",
+    "citations",
+    "bibliography",
+    "semantic-search",
+]
 license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
-    "Topic :: Text Processing :: Markup",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Text Processing :: Indexing",
 ]
 dependencies = [
     "pyzotero>=1.6.0",
@@ -47,8 +63,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/v-i-n-a-y/zotero-mcp-next"
-"Bug Tracker" = "https://github.com/v-i-n-a-y/zotero-mcp-next/issues"
+Homepage = "https://github.com/v-i-n-a-y/zotero-mcp-v2"
+Repository = "https://github.com/v-i-n-a-y/zotero-mcp-v2"
+"Bug Tracker" = "https://github.com/v-i-n-a-y/zotero-mcp-v2/issues"
+Changelog = "https://github.com/v-i-n-a-y/zotero-mcp-v2/releases"
 
 [project.scripts]
 zotero-mcp = "zotero_mcp.cli:main"
@@ -73,6 +91,7 @@ ignore = ["E501", "B008", "RUF001"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 addopts = "-q --strict-markers"
 filterwarnings = ["error::DeprecationWarning:zotero_mcp.*"]
 

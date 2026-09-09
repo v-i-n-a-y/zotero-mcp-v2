@@ -23,10 +23,11 @@ at the boundary by `@tool_errors` into `ToolError` — so MCP's `isError` flag
 is set and the model is told plainly that the call did not succeed. Errors
 carry a stable `code` and, where one exists, a `hint` naming the next action.
 
-**3. Small surface by default.** ~15 consolidated tools ship enabled. Optional
-capability groups are opt-in via `ZOTERO_MCP_TOOLSETS`. The full pre-1.0 name
-set is available behind `ZOTERO_MCP_COMPAT=1` for installations that reference
-the old names.
+**3. Small surface by default.** 14 consolidated tools ship enabled: seven
+reads, `semantic_search`, and six writes that only register when a writable
+web API key is configured. (`ZOTERO_MCP_TOOLSETS` and `ZOTERO_MCP_COMPAT` are
+parsed by the config layer for a future opt-in toolset mechanism and pre-1.0
+name compatibility, neither of which is built yet.)
 
 **4. Writes are reversible or refused.** Destructive operations default to
 `dry_run=True` and return a diff. Updates send `If-Unmodified-Since-Version`,
@@ -87,14 +88,20 @@ mishandle it.
 
 ## Build order
 
-1. ~~Foundation: errors, config, identifiers~~ ✅
+Shipped in 1.0:
+
+1. Foundation: errors, config, identifiers
 2. Zotero schema, result models, paging, markdown rendering
-3. Backends: protocol, web, local HTTP, SQLite, hybrid, factory
-4. Content: PDF/EPUB extraction, ranged page reads, fulltext cache
-5. Tool surface: search, items, content, annotations, notes, write, organize,
-   library, admin
-6. External services: Crossref, Unpaywall, arXiv, S2, PMC, Scite, Better BibTeX
-7. Semantic index + discovery tools
-8. Resources, prompts, toolsets
-9. Compatibility layer: all pre-1.0 tool names
-10. CLI, setup helper, docs, CI
+3. Backend: web, local HTTP, hybrid (local reads, web writes), factory
+4. Content: PDF/EPUB extraction, chunking, reference stripping, fulltext cache
+5. Tool surface: search, items, collections, tags, stats, health; write tools
+   with dry-run previews (items, tags, collections, notes)
+6. Semantic index: chunk-level ChromaDB store, incremental by item version,
+   cross-encoder rerank, filters, scheduled refresh
+7. CLI (`serve`, `health`, `index`), docs, CI
+
+Not built (and not currently planned unless asked for):
+
+- External services: Crossref, Unpaywall, arXiv, S2, PMC, Scite, Better BibTeX
+- Ranged page reads and annotation tools
+- Resources, prompts, toolsets, and the pre-1.0 compatibility name set
